@@ -14,3 +14,4 @@ Imports:
     gstat,
     nlme,
     rlang
+RoxygenNote: 7.3.2
