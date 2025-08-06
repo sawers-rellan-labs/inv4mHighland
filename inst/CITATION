@@ -1,0 +1,8 @@
+bibentry(
+  bibtype = "Manual",
+  title = "inv4mhighland: Spatial Analysis of Inv4m Chromosomal Inversion Effects in Highland Maize",
+  author = c(person("Fausto", "Rodriguez"), person("Highland Maize Research Team")),
+  year = "2025",
+  note = "R package version 0.1.0",
+  url = "https://github.com/username/inv4m-highland"
+)

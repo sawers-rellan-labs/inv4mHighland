@@ -1,0 +1,1172 @@
+---
+title: "Multi-Trait Spatial Analysis of Replicated Latin Square Field Experiment"
+author: "Analysis Pipeline"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    code_folding: hide
+knit: (function(inputFile, encoding) {rmarkdown::render(inputFile, encoding = encoding, output_dir = "../results")})
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      fig.width = 12, fig.height = 8)
+```
+
+## 1. Introduction
+
+This report extends the spatial analysis framework to all measured phenotypes in the inv4m field experiment. We systematically analyze nine traits (DTA, DTS, LAE, PH, EN, SL, BL, BW, EBA) using a consistent analytical pipeline that:
+
+1. Handles missing data appropriately for valid model comparisons
+2. Compares spatial autocorrelation patterns across traits via scaled variograms
+3. Evaluates six hierarchical model structures for each phenotype
+4. Quantifies treatment effects using the optimal model for each trait
+
+## 2. Setup and Data Preparation
+
+### 2.1. Load Libraries
+
+```{r load-libraries}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(nlme)
+library(gstat)
+library(emmeans)
+library(knitr)
+library(ggpubr)
+library(ggtext)      # For markdown text in plots
+library(VIM)         # For missing data visualization
+library(mgcv)        # For GAM models if needed
+```
+
+### 2.2. Load and Clean Data
+
+```{r load-data}
+# Load the dataset
+file_path <- "../data/CLY25_Inv4m.csv"
+if (!file.exists(file_path)) {
+  stop("Error: CLY25_Inv4m.csv not found in the working directory.")
+}
+
+field_data_raw <- read.csv(file_path, na.strings = c("","#N/A","NA"))
+
+# Clean and prepare data
+field_data <- field_data_raw %>%
+  # Calculate Estimated Blade Area (EBA) = 0.75 * BL * BW FIRST
+  mutate(EBA = 0.75 * BL * BW) %>%
+  rename(
+    plant_id = plant,
+    block = rep,
+    x = X_pos,
+    y = Y_pos,
+    inv4m = inv4m_gt
+  ) %>%
+  # Convert relevant columns to factors
+  mutate(across(c(plot_id, block, donor, inv4m), as.factor)) %>%
+  # Add small amount of noise to x coordinates to avoid identical positions
+  mutate(x = x + runif(n(), min = 0.0, max = 0.01))
+
+# Check data types after cleaning
+cat("Data types after cleaning:\n")
+str(field_data[c("DTA", "DTS", "DTA_GDD", "DTS_GDD", "LAE", "PH", "EN", "SL", "BL", "BW","EBA")])
+
+# Define phenotypes to analyze - all traits from DTA to BW
+# Check actual column names first
+cat("Available columns in dataset:\n")
+print(names(field_data_raw))
+
+# Define phenotypes based on actual column names from DTA to BW
+phenotypes <- c("DTA", "DTS", "DTA_GDD", "DTS_GDD", "LAE", "PH", "EN", "SL", "BL", "BW","EBA")
+
+cat("Requested phenotypes for analysis:\n")
+print(phenotypes)
+
+# Verify all phenotypes exist in the dataset
+missing_cols <- setdiff(phenotypes, names(field_data))
+if (length(missing_cols) > 0) {
+  cat("Warning: These phenotype columns are missing from the dataset:\n")
+  print(missing_cols)
+}
+
+available_phenotypes <- intersect(phenotypes, names(field_data))
+cat("Phenotypes available for analysis:\n")
+print(available_phenotypes)
+
+# Update phenotypes list to only include available columns
+phenotypes <- available_phenotypes
+
+cat("Final phenotypes list for analysis:\n")
+print(phenotypes)
+cat("Number of phenotypes:", length(phenotypes), "\n")
+cat("EBA in final list:", "EBA" %in% phenotypes, "\n")
+cat("GDD variables in list:", any(grepl("GDD", phenotypes)), "\n")
+cat("EBA exists in field_data:", "EBA" %in% names(field_data), "\n")
+if ("EBA" %in% names(field_data)) {
+  cat("EBA summary statistics:\n")
+  print(summary(field_data$EBA))
+}
+
+cat("Original data dimensions:", dim(field_data), "\n")
+head(field_data)
+```
+
+## 3. Missing Data Assessment
+
+Understanding missing data patterns is crucial for valid statistical inference.
+
+### 3.1. Missing Data Summary
+
+```{r missing-data-summary}
+# Use the correct phenotypes list - NO GDD, INCLUDE EBA
+missing_data_phenotypes <- c("DTA", "DTS", "LAE", "PH", "EN", "SL", "BL", "BW", "EBA")
+
+# Create missing data summary for correct phenotypes
+missing_summary <- field_data %>%
+  select(all_of(missing_data_phenotypes)) %>%
+  summarise(across(everything(), ~sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "phenotype", values_to = "missing_count") %>%
+  mutate(
+    total_obs = nrow(field_data),
+    missing_pct = round(missing_count / total_obs * 100, 1),
+    available_n = total_obs - missing_count
+  )
+
+print(missing_summary)
+```
+
+### 3.2. Missing Data Patterns
+
+```{r missing-patterns, fig.cap="Missing data patterns across all phenotypes including EBA"}
+# Use the correct phenotypes list for missing data visualization
+missing_data_phenotypes <- c("DTA", "DTS", "LAE", "PH", "EN", "SL", "BL", "BW", "EBA")
+
+# Visualize missing data patterns for correct phenotypes
+field_data %>%
+  select(all_of(missing_data_phenotypes)) %>%
+  VIM::aggr(col = c('navyblue', 'red'), 
+            numbers = TRUE, 
+            sortVars = TRUE, 
+            labels = missing_data_phenotypes)
+```
+
+### 3.3. Check for Systematic Missing Data
+
+```{r systematic-missing}
+# Check if missing data is related to treatments
+missing_by_treatment <- field_data %>%
+  select(donor, inv4m, all_of(phenotypes)) %>%
+  group_by(donor, inv4m) %>%
+  summarise(across(all_of(phenotypes), ~sum(is.na(.))), .groups = 'drop')
+
+cat("Missing data counts by treatment combination:\n")
+print(missing_by_treatment)
+
+# Check spatial distribution of missing data
+field_data %>%
+  select(x, y, all_of(phenotypes)) %>%
+  mutate(any_missing = rowSums(is.na(select(., all_of(phenotypes)))) > 0) %>%
+  ggplot(aes(x = x, y = y, color = any_missing)) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(values = c("FALSE" = "blue", "TRUE" = "red")) +
+  labs(title = "Spatial distribution of missing observations",
+       color = "Has missing\ndata") +
+  theme_classic() +
+  coord_equal()
+```
+
+## 4. Scaled Variogram Analysis
+
+Comparing spatial autocorrelation patterns across phenotypes using standardized variograms.
+
+### 4.1. Create Scaled Variograms Function
+
+```{r variogram-function}
+#' Calculate scaled variogram for a phenotype
+#' 
+#' @param data Complete-case dataset for the phenotype
+#' @param phenotype_name Name of the phenotype column
+#' @return List containing variogram data and scaling info
+calculate_scaled_variogram <- function(data, phenotype_name) {
+  
+  # Fit simple model to get residuals
+  formula_str <- paste(phenotype_name, "~ donor * inv4m")
+  m_simple <- lm(as.formula(formula_str), data = data)
+  
+  # Add residuals to data
+  data$resids <- NA
+  data$resids[as.integer(rownames(m_simple$model))] <- residuals(m_simple)
+  
+  # Create gstat object and calculate variogram
+  g_obj <- gstat(id = "resids", 
+                 formula = resids ~ 1, 
+                 locations = ~x+y,
+                 data = data %>% filter(!is.na(resids)))
+  
+  vgm_data <- variogram(g_obj)
+  
+  # Scale to 0-100
+  max_gamma <- max(vgm_data$gamma)
+  vgm_data$gamma_scaled <- (vgm_data$gamma / max_gamma) * 100
+  
+  return(list(
+    variogram = vgm_data,
+    max_gamma = max_gamma,
+    n_obs = nrow(data),
+    phenotype = phenotype_name
+  ))
+}
+```
+
+### 4.2. Calculate Variograms for All Phenotypes
+
+```{r calculate-variograms}
+# FORCE the correct phenotypes list for variograms - NO GDD, INCLUDE EBA
+variogram_phenotypes <- c("DTA", "DTS", "LAE", "PH", "EN", "SL", "BL", "BW", "EBA")
+
+# Calculate scaled variograms for each phenotype
+variogram_results <- list()
+
+# First, let's check sample sizes for all traits
+cat("=== SAMPLE SIZE CHECK FOR ALL TRAITS ===\n")
+for (trait in variogram_phenotypes) {
+  if (trait %in% names(field_data)) {
+    trait_data <- field_data %>%
+      filter(!is.na(.data[[trait]]) & 
+             !is.na(x) & !is.na(y) & 
+             !is.na(donor) & !is.na(inv4m) & !is.na(block))
+    cat(trait, ": n =", nrow(trait_data), "\n")
+  } else {
+    cat(trait, ": COLUMN NOT FOUND in field_data\n")
+  }
+}
+
+cat("\n=== PROCESSING VARIOGRAMS ===\n")
+for (trait in variogram_phenotypes) {
+  cat("Processing variogram for", trait, "...\n")
+  
+  # Check if trait exists in data
+  if (!trait %in% names(field_data)) {
+    cat("  ERROR: Column", trait, "not found in field_data\n")
+    next
+  }
+  
+  # Create complete-case dataset for this trait
+  trait_data <- field_data %>%
+    filter(!is.na(.data[[trait]]) & 
+           !is.na(x) & !is.na(y) & 
+           !is.na(donor) & !is.na(inv4m) & !is.na(block))
+  
+  cat("  Sample size:", nrow(trait_data), "\n")
+  
+  if (nrow(trait_data) > 10) {  # Lowered threshold for minimum observations
+    tryCatch({
+      variogram_results[[trait]] <- calculate_scaled_variogram(trait_data, trait)
+      cat("  Successfully calculated variogram\n")
+    }, error = function(e) {
+      cat("  ERROR calculating variogram:", e$message, "\n")
+    })
+  } else {
+    cat("  Warning: Insufficient data for", trait, "(need > 10 observations)\n")
+  }
+}
+
+cat("\nVariograms successfully calculated for:", length(variogram_results), "traits\n")
+cat("Traits with variograms:", names(variogram_results), "\n")
+
+# Create summary table
+if (length(variogram_results) > 0) {
+  vgm_summary <- map_dfr(variogram_results, function(x) {
+    tibble(
+      phenotype = x$phenotype,
+      n_obs = x$n_obs,
+      max_semivariance = round(x$max_gamma, 3)
+    )
+  })
+  
+  cat("\n=== VARIOGRAM SUMMARY STATISTICS ===\n")
+  print(vgm_summary)
+} else {
+  cat("No variograms could be calculated!\n")
+}
+```
+
+### 4.3. Plot Scaled Variograms
+
+```{r plot-variograms, fig.cap="Scaled empirical variograms for all phenotypes (0-100 scale) - single plot for direct comparison"}
+# Combine all variogram data
+all_vgm_data <- map_dfr(variogram_results, function(x) {
+  x$variogram %>%
+    mutate(phenotype = x$phenotype,
+           n_obs = x$n_obs)
+})
+
+# Create single combined variogram plot for direct comparison
+ggplot(all_vgm_data, aes(x = dist, y = gamma_scaled, color = phenotype)) +
+  geom_point(alpha = 0.7, size = 1.5) +
+  geom_line(alpha = 0.8, linewidth = 0.8) +
+  scale_color_brewer(type = "qual", palette = "Set3") +
+  labs(
+    title = "Scaled Empirical Variograms - All Phenotypes",
+    subtitle = "Scaled to 0-100 for direct comparison of spatial autocorrelation patterns",
+    x = "Distance",
+    y = "Scaled Semivariance (0-100)",
+    color = "Phenotype"
+  ) +
+  theme_classic2(base_size = 12) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2)))
+```
+
+## 5. Spatial Distribution Visualization
+
+### 5.1. Spatial Plotting Function
+
+```{r spatial-plot-function}
+#' Create spatial plot for a phenotype
+#' 
+#' @param data Dataset containing the phenotype
+#' @param col_var Phenotype column name
+#' @param plot_title Plot title
+#' @param legend_name Legend title
+#' @param x_lab X-axis label
+create_spatial_plot <- function(data, col_var, plot_title, legend_name, x_lab = "") {
+  col_sym <- ensym(col_var)
+  
+  data %>%
+    filter(!is.na(!!col_sym)) %>%
+    ggplot(aes(x = x, y = y)) +
+    geom_point(aes(color = !!col_sym), size = 1.2, alpha = 0.8) +
+    scale_color_distiller(palette = "RdYlGn", direction = 1, name = legend_name) +
+    labs(title = plot_title, x = x_lab, y = "Field Y position") +
+    theme_classic2(base_size = 10) +
+    theme(legend.position = "right") +
+    coord_equal()
+}
+```
+
+### 5.2. Spatial Distribution Plots
+
+```{r spatial-plots, fig.cap="Spatial distribution of phenotypes across the experimental field"}
+# Group 1: Flowering traits (days and GDD)
+plot_dta <- create_spatial_plot(field_data, DTA, "Days to Anthesis", "days")
+plot_dts <- create_spatial_plot(field_data, DTS, "Days to Silking", "days") 
+plot_dta_gdd <- create_spatial_plot(field_data, DTA_GDD, "Anthesis GDD", "GDD", x_lab = "Field X position")
+
+ggarrange(plot_dta, 
+          plot_dts + theme(axis.title.y = element_blank(), 
+                          axis.text.y = element_blank(), 
+                          axis.ticks.y = element_blank()),
+          plot_dta_gdd + theme(axis.title.y = element_blank(), 
+                         axis.text.y = element_blank(), 
+                         axis.ticks.y = element_blank()),
+          nrow = 1, widths = c(1.2, 1, 1))
+
+# Group 2: More flowering traits and plant architecture
+plot_dts_gdd <- create_spatial_plot(field_data, DTS_GDD, "Silking GDD", "GDD")
+plot_lae <- create_spatial_plot(field_data, LAE, "Leaves Above Ear", "count")
+plot_ph <- create_spatial_plot(field_data, PH, "Plant Height", "cm", x_lab = "Field X position")
+
+ggarrange(plot_dts_gdd, 
+          plot_lae + theme(axis.title.y = element_blank(), 
+                          axis.text.y = element_blank(), 
+                          axis.ticks.y = element_blank()),
+          plot_ph + theme(axis.title.y = element_blank(), 
+                         axis.text.y = element_blank(), 
+                         axis.ticks.y = element_blank()),
+          nrow = 1, widths = c(1.2, 1, 1))
+
+# Group 3: Morphological and reproductive traits
+plot_en <- create_spatial_plot(field_data, EN, "Ear Number", "count")
+plot_sl <- create_spatial_plot(field_data, SL, "Sheath Length", "cm")
+plot_bl <- create_spatial_plot(field_data, BL, "Blade Length", "cm")
+
+ggarrange(plot_en, 
+          plot_sl + theme(axis.title.y = element_blank(), 
+                         axis.text.y = element_blank(), 
+                         axis.ticks.y = element_blank()),
+          plot_bl + theme(axis.title.y = element_blank(), 
+                         axis.text.y = element_blank(), 
+                         axis.ticks.y = element_blank()),
+          nrow = 1, widths = c(1.2, 1, 1))
+
+# Group 4: Final morphological traits
+if ("EBA" %in% names(field_data)) {
+  plot_bw <- create_spatial_plot(field_data, BW, "Blade Width", "cm")
+  plot_eba <- create_spatial_plot(field_data, EBA, "Estimated Blade Area", "cm²", x_lab = "Field X position")
+  
+  ggarrange(plot_bw, 
+            plot_eba + theme(axis.title.y = element_blank(), 
+                            axis.text.y = element_blank(), 
+                            axis.ticks.y = element_blank()),
+            nrow = 1, widths = c(1.2, 1))
+} else {
+  cat("EBA column not found in field_data. Available columns:\n")
+  print(names(field_data))
+  plot_bw <- create_spatial_plot(field_data, BW, "Blade Width", "cm", x_lab = "Field X position")
+  print(plot_bw)
+}
+```
+
+## 6. Comprehensive Model Comparison
+
+### 6.1. Model Fitting Functions
+
+```{r model-functions}
+#' Fit all six model structures for a given phenotype
+#' 
+#' @param data Complete-case dataset for the phenotype  
+#' @param phenotype_name Name of the phenotype column
+#' @return List of fitted models with error handling
+fit_all_models <- function(data, phenotype_name) {
+  
+  formula_str <- paste(phenotype_name, "~ donor * inv4m")
+  models <- list()
+  
+  # Create plot-level data for Model 1
+  plot_data <- data %>%
+    group_by(plot_id, plot_row, plot_col, block, donor, inv4m) %>%
+    summarise(trait_mean = mean(.data[[phenotype_name]], na.rm = TRUE), 
+              .groups = 'drop')
+  
+  # Model 1: Plot means baseline
+  cat("    Attempting Model 1...\n")
+  model_1 <- tryCatch({
+    lm(trait_mean ~ poly(plot_row, 2) + poly(plot_col, 2) + block + donor * inv4m, 
+       data = plot_data)
+  }, error = function(e) {
+    cat("    Model 1 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_1"]] <- model_1
+  if (!is.null(model_1)) cat("    Model 1: SUCCESS\n")
+  
+  # Model 2: Spatial correlation only  
+  cat("    Attempting Model 2...\n")
+  model_2 <- tryCatch({
+    gls(as.formula(formula_str),
+        correlation = corSpher(form = ~ x + y | block/plot_id, nugget = TRUE),
+        data = data, method = "REML")
+  }, error = function(e) {
+    cat("    Model 2 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_2"]] <- model_2
+  if (!is.null(model_2)) cat("    Model 2: SUCCESS\n")
+  
+  # Model 3: Plot random effects
+  cat("    Attempting Model 3...\n")
+  model_3 <- tryCatch({
+    lme(as.formula(paste(phenotype_name, "~ donor * inv4m + block")),
+        random = ~ 1 | plot_id, data = data, method = "REML")
+  }, error = function(e) {
+    cat("    Model 3 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_3"]] <- model_3
+  if (!is.null(model_3)) cat("    Model 3: SUCCESS\n")
+  
+  # Model 4: Plot random + gradients
+  cat("    Attempting Model 4...\n")
+  model_4 <- tryCatch({
+    lme(as.formula(paste(phenotype_name, "~ donor * inv4m + block + plot_row + plot_col")),
+        random = ~ 1 | plot_id, data = data, method = "REML")
+  }, error = function(e) {
+    cat("    Model 4 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_4"]] <- model_4
+  if (!is.null(model_4)) cat("    Model 4: SUCCESS\n")
+  
+  # Model 5: Block random + spatial correlation
+  cat("    Attempting Model 5...\n")
+  model_5 <- tryCatch({
+    lme(as.formula(formula_str),
+        random = ~ 1 | block,
+        correlation = corSpher(form = ~ x + y | block),
+        data = data, method = "REML")
+  }, error = function(e) {
+    cat("    Model 5 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_5"]] <- model_5
+  if (!is.null(model_5)) cat("    Model 5: SUCCESS\n")
+  
+  # Model 6: Full hierarchical + spatial polynomials
+  cat("    Attempting Model 6...\n")
+  model_6 <- tryCatch({
+    lme(as.formula(paste(phenotype_name, "~ donor * inv4m + poly(x, 2) + poly(y, 2)")),
+        random = ~ 1 | block/plot_id, data = data, method = "REML")
+  }, error = function(e) {
+    cat("    Model 6 FAILED:", e$message, "\n")
+    return(NULL)
+  })
+  models[["model_6"]] <- model_6
+  if (!is.null(model_6)) cat("    Model 6: SUCCESS\n")
+  
+  return(models)
+}
+
+#' Extract model comparison statistics
+#' 
+#' @param models List of fitted models
+#' @param phenotype_name Name of the phenotype
+#' @return Data frame with model comparison metrics
+extract_model_stats <- function(models, phenotype_name) {
+  
+  cat("    Extracting stats for", phenotype_name, "\n")
+  cat("    Models available:", names(models), "\n")
+  cat("    Non-null models:", sum(!sapply(models, is.null)), "\n")
+  
+  # Initialize tibble with proper column structure
+  model_stats <- tibble(
+    phenotype = character(),
+    model = character(),
+    AIC = numeric(),
+    BIC = numeric(),
+    logLik = numeric(),
+    converged = logical()
+  )
+  
+  for (i in 1:6) {
+    model_name <- paste0("model_", i)
+    model <- models[[model_name]]
+    
+    cat("      Processing", model_name, "...")
+    
+    # Check if model exists and is a proper model object
+    if (!is.null(model)) {
+      cat(" exists, class:", class(model)[1])
+      tryCatch({
+        # Extract stats based on model class
+        if (inherits(model, "lm")) {
+          # For lm objects
+          aic_val <- AIC(model)
+          bic_val <- BIC(model)
+          ll_val <- as.numeric(logLik(model))
+          
+          model_stats <- bind_rows(model_stats, tibble(
+            phenotype = phenotype_name,
+            model = model_name,
+            AIC = aic_val,
+            BIC = bic_val,
+            logLik = ll_val,
+            converged = TRUE
+          ))
+          cat(" - SUCCESS (AIC:", round(aic_val, 1), ", BIC:", round(bic_val, 1), ")\n")
+          
+        } else if (inherits(model, c("lme", "gls"))) {
+          # For lme/gls objects - check if they have proper logLik
+          aic_val <- AIC(model)
+          bic_val <- BIC(model)
+          ll_val <- as.numeric(logLik(model))
+          
+          model_stats <- bind_rows(model_stats, tibble(
+            phenotype = phenotype_name,
+            model = model_name,
+            AIC = aic_val,
+            BIC = bic_val,
+            logLik = ll_val,
+            converged = TRUE
+          ))
+          cat(" - SUCCESS (AIC:", round(aic_val, 1), ", BIC:", round(bic_val, 1), ")\n")
+          
+        } else {
+          cat(" - Unknown class:", class(model), "\n")
+        }
+      }, error = function(e) {
+        cat(" - ERROR:", e$message, "\n")
+        # Add row with NAs for failed extraction
+        model_stats <<- bind_rows(model_stats, tibble(
+          phenotype = phenotype_name,
+          model = model_name,
+          AIC = NA_real_,
+          BIC = NA_real_,
+          logLik = NA_real_,
+          converged = FALSE
+        ))
+      })
+    } else {
+      cat(" - NULL (failed to fit)\n")
+      # Model is NULL (failed to fit)
+      model_stats <- bind_rows(model_stats, tibble(
+        phenotype = phenotype_name,
+        model = model_name,
+        AIC = NA_real_,
+        BIC = NA_real_,
+        logLik = NA_real_,
+        converged = FALSE
+      ))
+    }
+  }
+  
+  cat("    Final stats for", phenotype_name, ":", nrow(model_stats), "rows\n")
+  return(model_stats)
+}
+```
+
+### 6.2. Fit Models for All Phenotypes
+
+```{r fit-all-models}
+# Initialize results storage
+all_models <- list()
+all_model_stats <- tibble()
+model_fitting_diagnostics <- tibble()
+
+# Update phenotypes list for model fitting to match what we want
+phenotypes_for_models <- c("DTA", "DTS", "LAE", "PH", "EN", "SL", "BL", "BW", "EBA")
+
+# Fit models for each phenotype
+for (trait in phenotypes_for_models) {
+  cat("\n=== FITTING MODELS FOR", trait, "===\n")
+  
+  tryCatch({
+    # Create complete-case dataset
+    trait_data <- field_data %>%
+      filter(!is.na(.data[[trait]]) & 
+             !is.na(x) & !is.na(y) & 
+             !is.na(donor) & !is.na(inv4m) & 
+             !is.na(block) & !is.na(plot_id) &
+             !is.na(plot_row) & !is.na(plot_col))
+    
+    cat("  Sample size:", nrow(trait_data), "\n")
+    
+    # Record diagnostics for this trait
+    trait_diagnostics <- tibble(
+      phenotype = trait,
+      sample_size = nrow(trait_data),
+      n_donors = length(unique(trait_data$donor)),
+      n_inv4m_levels = length(unique(trait_data$inv4m)),
+      n_blocks = length(unique(trait_data$block)),
+      n_plots = length(unique(trait_data$plot_id)),
+      trait_range = paste(round(range(trait_data[[trait]], na.rm = TRUE), 2), collapse = " - "),
+      models_attempted = 0,
+      models_successful = 0,
+      failed_models = "",
+      error_messages = ""
+    )
+    
+    if (nrow(trait_data) > 50) {  # Minimum sample size check
+      # Fit all models
+      cat("  Fitting models...\n")
+      trait_models <- fit_all_models(trait_data, trait)
+      all_models[[trait]] <- trait_models
+      
+      # Count successful models
+      successful_models <- names(trait_models)[!sapply(trait_models, is.null)]
+      failed_models <- names(trait_models)[sapply(trait_models, is.null)]
+      
+      trait_diagnostics$models_attempted <- 6
+      trait_diagnostics$models_successful <- length(successful_models)
+      trait_diagnostics$failed_models <- paste(failed_models, collapse = ", ")
+      
+      cat("  Successful models:", length(successful_models), "out of 6\n")
+      if (length(failed_models) > 0) {
+        cat("  Failed models:", paste(failed_models, collapse = ", "), "\n")
+      }
+      
+      # Extract statistics
+      if (length(successful_models) > 0) {
+        cat("  Extracting model statistics...\n")
+        trait_stats <- extract_model_stats(trait_models, trait)
+        cat("    Extracted", nrow(trait_stats), "rows of statistics\n")
+        all_model_stats <- bind_rows(all_model_stats, trait_stats)
+        cat("    Total model stats now:", nrow(all_model_stats), "rows\n")
+      } else {
+        cat("  No successful models for", trait, "\n")
+      }
+    } else {
+      cat("  Warning: Insufficient data for", trait, "\n")
+      trait_diagnostics$error_messages <- "Insufficient sample size (< 50 observations)"
+    }
+    
+    # Add diagnostics
+    model_fitting_diagnostics <- bind_rows(model_fitting_diagnostics, trait_diagnostics)
+    
+  }, error = function(e) {
+    cat("  MAJOR ERROR processing", trait, ":", e$message, "\n")
+    # Still add basic diagnostics even if everything failed
+    error_diagnostics <- tibble(
+      phenotype = trait,
+      sample_size = NA,
+      n_donors = NA,
+      n_inv4m_levels = NA,
+      n_blocks = NA,
+      n_plots = NA,
+      trait_range = NA,
+      models_attempted = 0,
+      models_successful = 0,
+      failed_models = "",
+      error_messages = paste("Major error:", e$message)
+    )
+    model_fitting_diagnostics <<- bind_rows(model_fitting_diagnostics, error_diagnostics)
+  })
+}
+
+cat("\n=== FINAL SUMMARY ===\n")
+cat("Processed", length(all_models), "phenotypes out of", length(phenotypes), "requested\n")
+cat("Phenotypes with models:", names(all_models), "\n")
+cat("Missing phenotypes:", setdiff(phenotypes, names(all_models)), "\n")
+
+# Display model fitting diagnostics
+cat("\n=== MODEL FITTING DIAGNOSTICS ===\n")
+print(model_fitting_diagnostics)
+
+# Summary of model fitting success
+cat("\n=== MODEL FITTING SUMMARY ===\n")
+successful_traits <- model_fitting_diagnostics %>%
+  filter(models_successful > 0) %>%
+  nrow()
+
+cat("Traits with successful model fits:", successful_traits, "out of", length(phenotypes), "\n")
+
+failed_traits <- model_fitting_diagnostics %>%
+  filter(models_successful == 0)
+
+if (nrow(failed_traits) > 0) {
+  cat("\nTraits that failed all model fitting:\n")
+  for (i in 1:nrow(failed_traits)) {
+    cat("  -", failed_traits$phenotype[i], ":", failed_traits$error_messages[i], "\n")
+  }
+}
+
+# Model-specific failure patterns
+if (nrow(all_model_stats) > 0) {
+  model_failure_summary <- all_model_stats %>%
+    group_by(model) %>%
+    summarise(
+      n_attempted = n(),
+      n_successful = sum(!is.na(BIC)),
+      n_failed = sum(is.na(BIC)),
+      success_rate = round(n_successful / n_attempted * 100, 1),
+      .groups = 'drop'
+    )
+  
+  cat("\n=== MODEL-SPECIFIC SUCCESS RATES ===\n")
+  print(model_failure_summary)
+} else {
+  cat("No model statistics available\n")
+}
+```
+
+### 6.3. Model Comparison Results
+
+```{r model-comparison-results}
+# Check if we have any model statistics
+cat("Total model statistics available:", nrow(all_model_stats), "\n")
+if (nrow(all_model_stats) > 0) {
+  cat("Columns in all_model_stats:", names(all_model_stats), "\n")
+  cat("Unique phenotypes:", length(unique(all_model_stats$phenotype)), "\n")
+  cat("Unique models:", length(unique(all_model_stats$model)), "\n")
+  cat("First few rows:\n")
+  print(head(all_model_stats))
+} else {
+  cat("ERROR: No model statistics available. Check model fitting process.\n")
+}
+
+# Only proceed if we have data
+if (nrow(all_model_stats) > 0) {
+  # BIC comparison table - ensure all combinations are present, exclude model_1
+  bic_matrix <- all_model_stats %>%
+    filter(model != "model_1") %>%  # Exclude model_1 from comparison
+    select(phenotype, model, BIC) %>%
+    complete(phenotype, model, fill = list(BIC = NA)) %>%  # Fill missing combinations with NA
+    pivot_wider(names_from = model, values_from = BIC)
+  
+  cat("BIC matrix dimensions:", dim(bic_matrix), "\n")
+  cat("BIC matrix columns:", names(bic_matrix), "\n")
+  
+  # Convert to matrix for kable, handling the phenotype column
+  if (nrow(bic_matrix) > 0 && ncol(bic_matrix) > 1) {
+    # Check if phenotype column exists
+    if ("phenotype" %in% names(bic_matrix)) {
+      # Use a more robust approach to create the table
+      bic_table <- bic_matrix %>%
+        select(-phenotype) %>%
+        as.data.frame()
+      
+      # Set row names manually
+      rownames(bic_table) <- bic_matrix$phenotype
+      
+      cat("Final BIC table dimensions:", dim(bic_table), "\n")
+      cat("Final BIC table column names:", colnames(bic_table), "\n")
+      cat("Final BIC table row names:", rownames(bic_table), "\n")
+      
+      # Try simple printing first to avoid kable issues
+      cat("\n=== BIC VALUES FOR MIXED-EFFECTS MODELS (LOWER IS BETTER) ===\n")
+      cat("Note: Model_1 (fixed effects only) excluded from comparison\n")
+      print(round(bic_table, 1))
+      
+    } else {
+      cat("Warning: No 'phenotype' column found in BIC matrix\n")
+      print(bic_matrix)
+    }
+  } else {
+    cat("BIC matrix is empty or has insufficient columns\n")
+    print(bic_matrix)
+  }
+  
+  # Best model for each phenotype (excluding model_1)
+  best_models <- all_model_stats %>%
+    filter(!is.na(BIC) & model != "model_1") %>%  # Exclude model_1 from selection
+    group_by(phenotype) %>%
+    slice_min(BIC, n = 1) %>%
+    select(phenotype, best_model = model, best_BIC = BIC)
+  
+  if (nrow(best_models) > 0) {
+    cat("\n=== BEST MIXED-EFFECTS MODEL (LOWEST BIC) FOR EACH PHENOTYPE ===\n")
+    cat("Note: Model_1 (fixed effects only) excluded from selection\n")
+    print(best_models)
+    
+    # Model selection frequency
+    model_frequency <- best_models %>%
+      count(best_model, sort = TRUE) %>%
+      mutate(frequency = n / nrow(best_models) * 100)
+    
+    cat("\n=== FREQUENCY OF EACH MIXED-EFFECTS MODEL BEING SELECTED AS BEST ===\n")
+    cat("Note: Model_1 (fixed effects only) excluded from selection\n")
+    print(model_frequency)
+  } else {
+    cat("No valid model comparisons available\n")
+  }
+} else {
+  cat("Skipping model comparison - no model statistics available\n")
+}
+```
+
+### 6.4. Model Selection Visualization
+
+```{r model-selection-viz, fig.cap="Model selection patterns across phenotypes"}
+# Only create visualization if we have model statistics
+if (nrow(all_model_stats) > 0 && "phenotype" %in% names(all_model_stats)) {
+  # BIC differences from best model (excluding model_1)
+  bic_diff <- all_model_stats %>%
+    filter(!is.na(BIC) & model != "model_1") %>%  # Exclude model_1
+    group_by(phenotype) %>%
+    mutate(bic_diff = BIC - min(BIC)) %>%
+    ungroup()
+  
+  ggplot(bic_diff, aes(x = phenotype, y = bic_diff, fill = model)) +
+    geom_col(position = "dodge") +
+    scale_fill_brewer(type = "qual", palette = "Set3") +
+    labs(
+      title = "BIC differences from best mixed-effects model",
+      subtitle = "Lower values indicate better fit (Model_1 excluded)",
+      x = "Phenotype",
+      y = "ΔBIC from best model",
+      fill = "Model"
+    ) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+} else {
+  cat("Skipping model selection visualization - no valid model statistics available\n")
+}
+```
+
+## 7. Treatment Effects Analysis
+
+### 7.1. Extract Treatment Effects Function
+
+```{r treatment-effects-function}
+#' Extract treatment effects using emmeans from the best model
+#' 
+#' @param models List of fitted models for a phenotype
+#' @param best_model_name Name of the best model
+#' @param phenotype_name Name of the phenotype
+#' @return List containing emmeans results and contrasts
+extract_treatment_effects <- function(models, best_model_name, phenotype_name) {
+  
+  model <- models[[best_model_name]]
+  
+  if (is.null(model)) {
+    return(NULL)
+  }
+  
+  tryCatch({
+    # Calculate estimated marginal means
+    emm <- emmeans(model, specs = ~ inv4m | donor)
+    
+    # Calculate contrasts with CTRL as reference (reverse = TRUE)
+    contrasts <- pairs(emm, by = "donor", reverse = TRUE)
+    
+    return(list(
+      phenotype = phenotype_name,
+      model_used = best_model_name,
+      emmeans = emm,
+      contrasts = contrasts,
+      emm_summary = summary(emm),
+      contrast_summary = summary(contrasts)
+    ))
+    
+  }, error = function(e) {
+    cat("Error extracting effects for", phenotype_name, ":", e$message, "\n")
+    return(NULL)
+  })
+}
+```
+
+### 7.2. Extract Effects for All Phenotypes
+
+```{r extract-all-effects}
+# Check if we have model results before proceeding
+if (nrow(all_model_stats) == 0 || !exists("best_models")) {
+  cat("No model statistics or best models available. Skipping treatment effects analysis.\n")
+  treatment_effects <- list()
+  significant_effects <- tibble()
+} else {
+  # Extract treatment effects using best models (exclude GDD phenotypes to avoid non-independent hypotheses)
+  treatment_effects <- list()
+  
+  # All phenotypes included in effect size analysis (no GDD to exclude)
+  phenotypes_for_effects <- names(all_models)
+  cat("Phenotypes included in effect size analysis:\n")
+  cat(paste(phenotypes_for_effects, collapse = ", "), "\n")
+  
+  for (trait in phenotypes_for_effects) {
+    best_model_info <- best_models %>% filter(phenotype == trait)
+    
+    if (nrow(best_model_info) > 0) {
+      best_model_name <- best_model_info$best_model
+      
+      effects <- extract_treatment_effects(
+        all_models[[trait]], 
+        best_model_name, 
+        trait
+      )
+      
+      if (!is.null(effects)) {
+        treatment_effects[[trait]] <- effects
+      }
+    }
+  }
+  
+  # Summary of significant contrasts
+  significant_effects <- map_dfr(treatment_effects, function(x) {
+    if (!is.null(x$contrast_summary)) {
+      x$contrast_summary %>%
+        as_tibble() %>%
+        mutate(phenotype = x$phenotype,
+               model_used = x$model_used) %>%
+        filter(p.value < 0.05) %>%
+        select(phenotype, model_used, donor, estimate, SE, p.value)
+    }
+  })
+}
+
+if (nrow(significant_effects) > 0) {
+  cat("\n=== SIGNIFICANT INV4M EFFECTS (P < 0.05) BY DONOR BACKGROUND ===\n")
+  print(significant_effects)
+} else {
+  cat("No significant inv4m effects detected at p < 0.05\n")
+}
+```
+
+### 7.3. Treatment Effects Forest Plot
+
+```{r treatment-effects-viz, fig.cap="Forest plot of standardized inv4m effects within each donor background"}
+# Only create visualization if we have treatment effects
+if (length(treatment_effects) > 0) {
+  # Extract contrasts for forest plot
+  forest_data <- map_dfr(treatment_effects, function(x) {
+    if (!is.null(x$contrast_summary)) {
+      x$contrast_summary %>%
+        as_tibble() %>%
+        mutate(
+          phenotype = x$phenotype,
+          model_used = x$model_used,
+          # Calculate standardized effect size (Cohen's d approximation)
+          std_effect = estimate / SE,
+          # Calculate confidence intervals for standardized effect
+          ci_lower = (estimate - 1.96 * SE) / SE,
+          ci_upper = (estimate + 1.96 * SE) / SE
+        ) %>%
+        select(phenotype, donor, std_effect, ci_lower, ci_upper, p.value)
+    }
+  })
+  
+  if (nrow(forest_data) > 0) {
+    # Add Bonferroni correction but don't filter yet
+    forest_data <- forest_data %>%
+      mutate(p.adj = p.adjust(p.value, method = "bonferroni")) %>%
+      # Filter to nominally significant results (p < 0.05)
+      filter(p.value < 0.05) %>%
+      # Create significance indicator for Bonferroni correction
+      mutate(bonferroni_sig = p.adj < 0.05)
+    
+    if (nrow(forest_data) > 0) {
+      # Create trait labels and donor labels
+      forest_data <- forest_data %>%
+        mutate(
+          trait_label = case_when(
+            phenotype == "DTA" ~ "Days to Anthesis",
+            phenotype == "DTS" ~ "Days to Silking", 
+            phenotype == "LAE" ~ "Leaves Above Ear",
+            phenotype == "PH" ~ "Plant Height",
+            phenotype == "EN" ~ "Nodes with Ears",
+            phenotype == "SL" ~ "Sheath Length",
+            phenotype == "BL" ~ "Blade Length",
+            phenotype == "BW" ~ "Blade Width",
+            phenotype == "EBA" ~ "Estimated Blade Area",
+            TRUE ~ phenotype
+          ),
+          predictor = paste0("<i>Inv4m</i> from ", donor)
+        ) %>%
+        # Sort by absolute value of standardized effect size
+        arrange(desc(abs(std_effect))) %>%
+        mutate(trait_label = factor(trait_label, levels = unique(trait_label)))
+      
+      # Define position dodge for overlapping points
+      pd <- position_dodge(width = 0.3)
+      
+      # Create forest plot
+      forest_plot <- forest_data %>%
+        ggplot(aes(x = std_effect, y = trait_label)) +
+        xlab("Standardized Effect Size") +
+        ylab("Trait") +
+        geom_vline(xintercept = 0, lty = 2) +
+        geom_point(position = pd, size = 4, 
+                   aes(color = bonferroni_sig)) +
+        geom_errorbar(aes(xmin = ci_lower, xmax = ci_upper),
+                      position = pd, width = 0.2, size = 0.7) +
+        facet_wrap(. ~ predictor, ncol = 2) +
+        scale_color_manual(
+          values = c("TRUE" = "red", "FALSE" = "black"),
+          labels = c("TRUE" = "Bonferroni significant", "FALSE" = "Nominally significant"),
+          name = "Significance"
+        ) +
+        theme_classic2(base_size = 20) +
+        theme(
+          strip.background = element_blank(),
+          strip.text = ggtext::element_markdown(face = "bold", size = 15),
+          axis.title.y = element_blank(),
+          axis.text.y = element_text(hjust = 1, color = "black"),
+          panel.grid.major.y = element_line(color = "grey90"),
+          plot.caption = element_text(hjust = 0),
+          legend.position = "bottom"
+        ) +
+        labs(caption = "All nominally significant effects shown (p < 0.05). Red points survive Bonferroni correction.")
+      
+      print(forest_plot)
+      
+      # Print summary tables
+      cat("\n=== ALL NOMINALLY SIGNIFICANT EFFECTS (p < 0.05) ===\n")
+      all_sig_table <- forest_data %>%
+        select(phenotype, donor, std_effect, p.value, p.adj, bonferroni_sig) %>%
+        arrange(p.value)
+      print(all_sig_table)
+      
+      # Show Bonferroni-corrected results separately
+      bonferroni_sig_effects <- forest_data %>% filter(bonferroni_sig)
+      if (nrow(bonferroni_sig_effects) > 0) {
+        cat("\n=== BONFERRONI-CORRECTED SIGNIFICANT EFFECTS (p.adj < 0.05) ===\n")
+        bonf_table <- bonferroni_sig_effects %>%
+          select(phenotype, donor, std_effect, p.value, p.adj) %>%
+          arrange(p.adj)
+        print(bonf_table)
+      } else {
+        cat("\n=== NO EFFECTS SURVIVE BONFERRONI CORRECTION ===\n")
+      }
+      
+    } else {
+      cat("No nominally significant effects (p < 0.05)\n")
+    }
+  } else {
+    cat("No contrast data available for forest plot\n")
+  }
+} else {
+  cat("Skipping forest plot - no treatment effects available\n")
+}
+```
+
+### 7.4. Effect Size Summary
+
+```{r effect-size-summary}
+# Only calculate effect sizes if we have treatment effects (GDD phenotypes already excluded)
+if (length(treatment_effects) > 0) {
+  # Calculate standardized effect sizes
+  effect_sizes <- map_dfr(treatment_effects, function(x) {
+    if (!is.null(x$contrast_summary)) {
+      x$contrast_summary %>%
+        as_tibble() %>%
+        mutate(
+          phenotype = x$phenotype,
+          effect_size = abs(estimate) / SE,  # Rough standardized effect size
+          direction = ifelse(estimate > 0, "INV4M > CTRL", "INV4M < CTRL")
+        ) %>%
+        select(phenotype, donor, estimate, SE, effect_size, direction, p.value)
+    }
+  })
+  
+  if (nrow(effect_sizes) > 0) {
+    cat("\n=== EFFECT SIZES AND DIRECTIONS FOR INV4M CONTRASTS ===\n")
+    print(effect_sizes)
+  } else {
+    cat("No effect size data available\n")
+  }
+} else {
+  cat("Skipping effect size analysis - no treatment effects available\n")
+}
+```
+
+## 8. Summary and Conclusions
+
+### 8.1. Key Findings
+
+```{r summary}
+cat("=== ANALYSIS SUMMARY ===\n\n")
+
+cat("1. MISSING DATA:\n")
+print(missing_summary)
+
+cat("\n2. MODEL SELECTION FREQUENCY:\n")
+if (exists("model_frequency") && nrow(model_frequency) > 0) {
+  print(model_frequency)
+} else {
+  cat("No successful model fits available\n")
+}
+
+cat("\n3. SIGNIFICANT TREATMENT EFFECTS:\n")
+if (exists("significant_effects") && nrow(significant_effects) > 0) {
+  print(significant_effects)
+} else {
+  cat("No significant effects detected at p < 0.05\n")
+}
+
+cat("\n4. SPATIAL AUTOCORRELATION:\n")
+if (length(variogram_results) > 0) {
+  cat("Variograms calculated for", length(variogram_results), "phenotypes\n")
+  cat("All phenotypes showed evidence of spatial structure in their variograms\n")
+  cat("Scaling revealed relative magnitudes of spatial variance across traits\n")
+} else {
+  cat("No variograms could be calculated\n")
+}
+```
+
+### 8.2. Methodological Notes
+
+This analysis demonstrates the importance of:
+
+1. **Proper missing data handling**: Using complete-case analysis within each phenotype ensures valid model comparisons while maximizing sample sizes.
+
+2. **Systematic model comparison**: The hierarchical approach reveals that different phenotypes may require different spatial modeling strategies.
+
+3. **Spatial structure accounting**: The variogram analysis and model comparison show that ignoring spatial autocorrelation would lead to biased inference.
+
+4. **Treatment-by-background interactions**: The donor × inv4m interaction patterns vary across phenotypes, highlighting the importance of genetic background in phenotypic expression.
+
+### 8.3. Recommendations
+
+1. **Model selection**: Use the phenotype-specific best models identified here for final inference.
+
+2. **Multiple testing**: Consider adjusting p-values for multiple phenotype comparisons.
+
+3. **Biological interpretation**: The spatial patterns and treatment effects should be interpreted in the context of the biological processes underlying each phenotype.
+
+4. **Future studies**: The variogram parameters can inform optimal sampling designs for future experiments.

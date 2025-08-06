@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.git$
+^\.gitignore$
+^scripts/
+^batch/
+^results/
+^\.claude/
+^CLAUDE\.md$
+^config\.yaml$

@@ -1,0 +1,26 @@
+AGPv5:
+  # AGPv5 genome annotation ######################################################
+    # It seems like STAR needs a directory with genome fasta file as input for indexing
+    # this clashes with my current ref directory structure where I keep multiple versions of geneome assembliess in a single dir
+    # so I'll make a dir for the chromosome fastas for NAM5
+    
+    ref_fasta:
+      # Downloaded from
+      source: 'https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-56/fasta/zea_mays/dna/Zea_mays.Zm-B73-REFERENCE-NAM-5.0.dna.chromosome.1.fa.gz'
+      dir: '/rsstu/users/r/rrellan/sara/ref/NAM5_CHR'
+      files: ['',
+              '',
+              '']
+    gtf:
+    # Downloaded from
+      source: 'https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-56/gtf/zea_mays/Zea_mays.Zm-B73-REFERENCE-NAM-5.0.56.gtf.gz'
+      file:   '/rsstu/users/r/rrellan/sara/ref/Zea_mays.Zm-B73-REFERENCE-NAM-5.0.56.gtf'
+      
+    ref_fasta
+
+    
+# RNAseq reads ######################################################    
+fastq:
+ source: 
+ dir: '/rsstu/users/r/rrellan/sara/RNAseq/RellanAlvarez'
+ files: 

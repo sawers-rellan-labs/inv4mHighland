@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(R:*)",
+      "Bash(find:*)",
+      "Bash(source:*)",
+      "Bash(bash:*)",
+      "Bash(chmod:*)",
+      "Bash(./process_crow2020_rnaseq.sh:*)",
+      "Bash(timeout:*)",
+      "Bash(mkdir:*)"
+    ],
+    "deny": []
+  }
+}
