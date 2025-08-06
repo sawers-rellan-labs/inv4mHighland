@@ -7,3 +7,4 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
 Imports: dplyr, ggplot2
+RoxygenNote: 7.3.2

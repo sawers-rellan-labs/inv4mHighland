@@ -12,7 +12,7 @@ You can install the development version from GitHub with:
 
 ```r
 # install.packages("devtools")
-devtools::install_github("username/inv4m-highland")
+devtools::install_github("sawers-rellan-labs/inv4mHighland")
 ```
 
 ## Quick Start
