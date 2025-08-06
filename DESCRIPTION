@@ -6,4 +6,11 @@ Authors@R: person("Fausto", "Rodriguez", email = "fvrodriguez@example.com", role
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
-Imports: dplyr, ggplot2
+Imports: 
+    dplyr,
+    ggplot2,
+    ape,
+    emmeans,
+    gstat,
+    nlme,
+    rlang
