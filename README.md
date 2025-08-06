@@ -1,4 +1,4 @@
-# inv4mhighland
+# inv4mHighland
 
 [![R Package](https://img.shields.io/badge/R%20Package-v0.1.0-blue)](DESCRIPTION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -18,7 +18,7 @@ devtools::install_github("username/inv4m-highland")
 ## Quick Start
 
 ```r
-library(inv4mhighland)
+library(inv4mHighland)
 
 # Run the complete Clayton 2025 spatial analysis
 results <- run_clayton_spatial_analysis(
@@ -148,7 +148,7 @@ See `DESCRIPTION` file for complete dependency list.
 
 ### Basic Spatial Analysis
 ```r
-library(inv4mhighland)
+library(inv4mHighland)
 
 # Load data
 data <- read.csv("data/CLY25_Inv4m.csv")
@@ -185,7 +185,7 @@ effects <- extract_treatment_effects_emmeans(
 ## Documentation
 
 - Function documentation: `?function_name` or `help(function_name)`
-- Package vignettes: `browseVignettes("inv4mhighland")`
+- Package vignettes: `browseVignettes("inv4mHighland")`
 - Analysis notebook: `docs/notebooks/inv4m_field_modelling.Rmd`
 
 ## Citation
@@ -194,7 +194,7 @@ If you use this package in your research, please cite:
 
 ```bibtex
 @Manual{inv4mhighland,
-  title = {inv4mhighland: Spatial Analysis of Inv4m Chromosomal Inversion Effects in Highland Maize},
+  title = {inv4mHighland: Spatial Analysis of Inv4m Chromosomal Inversion Effects in Highland Maize},
   author = {Fausto Rodriguez and Highland Maize Research Team},
   year = {2025},
   note = {R package version 0.1.0},
