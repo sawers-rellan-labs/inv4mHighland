@@ -1,21 +1,17 @@
-#' Multi-trait Analysis Functions
-#'
+#' Applying Univariate Response Spatial Models to Multiple Phenotypes.
 #' Functions for analyzing multiple traits simultaneously.
 
-#' Analyze multiple traits
 #' 
-#' Performs standardized analysis across multiple traits
-#' 
+#' @description This function applies unviariate response spatial mixed models to multiple traits
 #' @param data Dataset containing trait data
 #' @param traits Vector of trait names to analyze
-#' @param model_type Type of model to fit ("plot_re", etc.)
 #' 
 #' @return List of analysis results for each trait
 #' @export
 #' @import dplyr
 #' @import nlme
 #' @import emmeans
-analyze_multiple_traits <- function(data, traits, model_type = "plot_re") {
+fit_spatial_models_by_trait() <- function(data, traits) {
   results <- list()
   
   for (trait in traits) {
@@ -27,21 +23,19 @@ analyze_multiple_traits <- function(data, traits, model_type = "plot_re") {
     
     cat("\nAnalyzing", trait, "...\n")
     
-    # Fit model based on type
-    if (model_type == "plot_re") {
-      formula <- as.formula(paste(trait, "~ donor * inv4m + block + poly(x_c, 2) + poly(y_c, 2)"))
-      
-      mod <- tryCatch({
-        lme(formula,
-            random = ~ 1 | plot_id,
-            data = data,
-            method = "REML",
-            na.action = na.omit)
-      }, error = function(e) {
-        cat("  Model failed for", trait, ":", e$message, "\n")
-        NULL
-      })
-    }
+    # Fit model (plot_re)
+    formula <- as.formula(paste(trait, "~ donor * inv4m + block + poly(x_c, 2) + poly(y_c, 2)"))
+    
+    mod <- tryCatch({
+      lme(formula,
+          random = ~ 1 | plot_id,
+          data = data,
+          method = "REML",
+          na.action = na.omit)
+    }, error = function(e) {
+      cat("  Model failed for", trait, ":", e$message, "\n")
+      NULL
+    })
     
     if (!is.null(mod)) {
       results[[trait]] <- list(
@@ -53,8 +47,10 @@ analyze_multiple_traits <- function(data, traits, model_type = "plot_re") {
     }
   }
   
-  return(results)
+  results
 }
+
+
 
 #' Create summary report
 #' 
