@@ -5,7 +5,7 @@
 #' The goal is to identify genes with consistent inv4m effects across
 #' phosphorus treatments.
 #'
-#' @author Francisco Rodriguez
+#' @author Fausto Rodriguez
 #' @date 2025-08-04
 
 # Load required libraries -----------------------------------------------
@@ -19,8 +19,8 @@ library(ggpubr)        # CRAN: publication ready plots
 library(ggtext)        # CRAN: formatted text in plots
 
 # Configuration ----------------------------------------------------------
-DATA_DIR <- "../../../data"
-OUTPUT_DIR <- "results_psu_2022"
+DATA_DIR <- "data"
+OUTPUT_DIR <- "results"
 MIN_LIB_SIZE <- 2e7  # Minimum library size threshold
 LOGFC_THRESHOLD_GENERAL <- 2     # LogFC threshold for most predictors
 LOGFC_THRESHOLD_TISSUE <- 0.7    # LogFC threshold for tissue effects
@@ -96,7 +96,7 @@ create_filtered_dgelist <- function(counts, sample_info, min_lib_size) {
   # Normalize
   y_final <- calcNormFactors(y_final)
   
-  return(y_final)
+  y_final
 }
 
 #' Perform MDS analysis and generate plots
@@ -125,7 +125,7 @@ perform_mds_analysis <- function(dge_list, output_dir) {
   # Create MDS plots
   generate_mds_plots(mds_data, mds, mds2, output_dir)
   
-  return(mds_data)
+  mds_data
 }
 
 #' Generate MDS plots
@@ -221,11 +221,11 @@ perform_de_analysis <- function(dge_list, design_formula) {
   fit <- lmFit(voom_result)
   ebayes_fit <- eBayes(fit, robust = TRUE)
   
-  return(list(
+  list(
     voom = voom_result,
     fit = ebayes_fit,
     design = design
-  ))
+  )
 }
 
 #' Extract differential expression results
@@ -234,7 +234,7 @@ perform_de_analysis <- function(dge_list, design_formula) {
 #' @param predictors Vector of predictor names to extract
 #' @param gene_annotation Gene annotation data frame
 #' @return Data frame with DE results
-extract_de_results <- function(ebayes_fit, predictors, gene_annotation) {
+get_DE_effects <- function(ebayes_fit, predictors, gene_annotation) {
   results_list <- list()
   
   for (predictor in predictors) {
@@ -386,187 +386,175 @@ add_mahalanobis_outliers <- function(data, distance_quantile = 0.05,
 
 # Main analysis pipeline -------------------------------------------------
 
-#' Main function to run the complete DEG analysis
-#'
-#' @export
-run_deg_analysis <- function() {
-  cat("Starting differential expression analysis...\n")
+
+cat("Starting differential expression analysis...\n")
   
-  # 1. Load and prepare data
-  cat("Loading expression data...\n")
-  expr_data <- load_expression_data(
-    file.path(DATA_DIR, "inv4mRNAseq_gene_sample_exp.csv"),
-    file.path(DATA_DIR, "PSU-PHO22_Metadata.csv")
-  )
-  
-  # 2. Create filtered DGEList
-  cat("Creating filtered DGEList...\n")
-  dge_list <- create_filtered_dgelist(
-    expr_data$counts,
-    expr_data$sample_info,
-    MIN_LIB_SIZE
-  )
-  
-  cat("Retained", ncol(dge_list), "samples after quality filtering\n")
-  
-  # 3. Perform MDS analysis
-  cat("Performing MDS analysis...\n")
-  mds_data <- perform_mds_analysis(dge_list, OUTPUT_DIR)
-  
-  # 4. Perform differential expression analysis
-  cat("Performing differential expression analysis...\n")
-  design_formula <- ~ Plot_Column + Plot_Row + leaf_tissue + Treatment * Genotype
-  de_results <- perform_de_analysis(dge_list, design_formula)
-  
-  # Save normalized expression data
-  saveRDS(de_results$voom$E, file.path(OUTPUT_DIR, "normalized_expression_logCPM.rda"))
-  saveRDS(de_results$voom, file.path(OUTPUT_DIR, "normalized_expression_voom_object.rda"))
-  
-  # 5. Load gene annotation
-  cat("Loading gene annotation...\n")
-  gene_symbol <- read.table(
-    file.path(DATA_DIR, "gene_symbol.tab"),
+# 1. Load and prepare data
+cat("Loading expression data...\n")
+expr_data <- load_expression_data(
+  file.path(DATA_DIR, "inv4mRNAseq_gene_sample_exp.csv"),
+  file.path(DATA_DIR, "PSU-PHO22_Metadata.csv")
+)
+
+# 2. Create filtered DGEList
+cat("Creating filtered DGEList...\n")
+dge_list <- create_filtered_dgelist(
+  expr_data$counts,
+  expr_data$sample_info,
+  MIN_LIB_SIZE
+)
+
+cat("Retained", ncol(dge_list), "samples after quality filtering\n")
+
+# 3. Perform MDS analysis
+cat("Performing MDS analysis...\n")
+mds_data <- perform_mds_analysis(dge_list, OUTPUT_DIR)
+
+# 4. Perform differential expression analysis
+cat("Performing differential expression analysis...\n")
+design_formula <- ~ Plot_Column + Plot_Row + leaf_tissue + Treatment * Genotype
+de_results <- perform_de_analysis(dge_list, design_formula)
+
+# Save normalized expression data
+saveRDS(de_results$voom$E, file.path(OUTPUT_DIR, "normalized_expression_logCPM.rda"))
+saveRDS(de_results$voom, file.path(OUTPUT_DIR, "normalized_expression_voom_object.rda"))
+
+# 5. Load gene annotation
+cat("Loading gene annotation...\n")
+gene_symbol <- read.table(
+  file.path(DATA_DIR, "gene_symbol.tab"),
+  quote = "", header = TRUE, sep = "\t", na.strings = ""
+)
+
+pannzer_path <- "~/Desktop/PANNZER/PANNZER_DESC.tab"
+if (file.exists(pannzer_path)) {
+  pannzer <- read.table(
+    pannzer_path,
     quote = "", header = TRUE, sep = "\t", na.strings = ""
-  )
-  
-  pannzer_path <- "~/Desktop/PANNZER/PANNZER_DESC.tab"
-  if (file.exists(pannzer_path)) {
-    pannzer <- read.table(
-      pannzer_path,
-      quote = "", header = TRUE, sep = "\t", na.strings = ""
-    ) %>%
-      group_by(gene_model) %>%
-      slice(1) %>%
-      select(gene_model, desc)
-  } else {
-    warning("PANNZER annotation file not found, proceeding without descriptions")
-    pannzer <- data.frame(gene_model = character(), desc = character())
-  }
-  
-  gene_annotation <- gene_symbol %>%
-    left_join(pannzer, by = "gene_model")
-  
-  # 6. Extract and classify results
-  cat("Extracting differential expression results...\n")
-  predictors_of_interest <- c(
-    "leaf_tissue",
-    "Treatment-P",
-    "GenotypeINV4",
-    "Treatment-P:GenotypeINV4"
-  )
-  
-  effects <- extract_de_results(
-    de_results$fit,
-    predictors_of_interest,
-    gene_annotation
-  )
-  
-  # 7. Load genomic coordinates
-  cat("Loading genomic coordinates...\n")
-  genomic_data <- load_genomic_coordinates(
-    "~/ref/zea/Zea_mays.Zm-B73-REFERENCE-NAM-5.0.59.chr.gff3"
-  )
-  
-  # Add genomic coordinates to results
-  effects <- effects %>%
-    mutate(desc_merged = coalesce(locus_name, desc)) %>%
-    select(predictor, regulation, Response, locus_symbol, desc_merged, everything()) %>%
-    rename(gene = Response) %>%
-    inner_join(
-      genomic_data$genes %>%
-        as.data.frame() %>%
-        select(
-          gene = gene_id,
-          CHR = seqnames,
-          BP = start
-        ) %>%
-        mutate(CHR = as.integer(as.character(CHR)))
-    )
-  
-  # 8. Apply statistical classifications
-  cat("Applying statistical classifications...\n")
-  logfc_thresholds <- c(
-    "general" = LOGFC_THRESHOLD_GENERAL,
-    "leaf_tissue" = LOGFC_THRESHOLD_TISSUE
-  )
-  
-  effects <- classify_de_results(effects, logfc_thresholds, FDR_THRESHOLD)
-  
-  # 9. Add genomic location classifications
-  effects <- effects %>%
-    mutate(
-      in_shared = CHR == 4 & 
-        (BP >= genomic_data$introgression_start) & 
-        (BP <= genomic_data$introgression_end),
-      in_inv4m = CHR == 4 & 
-        (BP >= genomic_data$inv4m_start) & 
-        (BP <= genomic_data$inv4m_end),
-      in_flanking = in_shared & !in_inv4m,
-      region = case_when(
-        in_inv4m ~ "inv4m",
-        in_flanking ~ "flanking",
-        TRUE ~ "outside"
-      )
-    )
-  
-  # 10. Add Mahalanobis outliers
-  cat("Adding Mahalanobis outlier detection...\n")
-  effects_with_outliers <- add_mahalanobis_outliers(effects)
-  
-  # 11. Generate summary outputs
-  cat("Generating summary outputs...\n")
-  
-  # DEG summary
-  deg_summary <- effects_with_outliers %>%
-    filter(is_significant & regulation != "Unregulated") %>%
-    mutate(
-      in_cis = gene %in% genomic_data$shared_introgression_genes,
-      in_trans = !in_cis,
-      in_Inv4m = gene %in% genomic_data$inv4m_genes
-    ) %>%
-    select(
-      predictor, regulation, gene, locus_symbol,
-      description = desc_merged, logFC, neglogP,
-      in_cis, in_trans, in_Inv4m
-    ) %>%
-    arrange(regulation, -neglogP, .by_group = TRUE) %>%
-    group_by(predictor, regulation) %>%
-    arrange(regulation, -neglogP, .by_group = TRUE)
-  
-  # Save results
-  write.csv(
-    effects_with_outliers,
-    file.path(OUTPUT_DIR, "predictor_effects.csv"),
-    row.names = FALSE
-  )
-  
-  write.csv(
-    deg_summary %>% filter(predictor == "GenotypeINV4"),
-    file.path(OUTPUT_DIR, "PSU_Inv4m_DEGs.csv"),
-    row.names = FALSE
-  )
-  
-  write.csv(
-    deg_summary %>% filter(predictor == "Treatment-P"),
-    file.path(OUTPUT_DIR, "PSU_phosphorus_DEGs.csv"),
-    row.names = FALSE
-  )
-  
-  cat("Analysis complete!\n")
-  cat("Results saved to:\n")
-  cat("- predictor_effects.csv: All effects with statistical classifications\n")
-  cat("- PSU_Inv4m_DEGs.csv: Inv4m differential expression results\n")
-  cat("- PSU_phosphorus_DEGs.csv: Phosphorus differential expression results\n")
-  
-  return(list(
-    effects = effects_with_outliers,
-    deg_summary = deg_summary,
-    de_results = de_results,
-    genomic_data = genomic_data
-  ))
+  ) %>%
+    group_by(gene_model) %>%
+    slice(1) %>%
+    select(gene_model, desc)
+} else {
+  warning("PANNZER annotation file not found, proceeding without descriptions")
+  pannzer <- data.frame(gene_model = character(), desc = character())
 }
 
-# Execute analysis if script is run directly
-if (!interactive()) {
-  results <- run_deg_analysis()
-}
+gene_annotation <- gene_symbol %>%
+  left_join(pannzer, by = "gene_model")
+
+# 6. Extract and classify results
+cat("Extracting differential expression results...\n")
+predictors_of_interest <- c(
+  "leaf_tissue",
+  "TreatmentLow_P",
+  "GenotypeINV4",
+  "TreatmentLow_P:GenotypeINV4"
+)
+
+effects <- get_DE_effects(
+  de_results$fit,
+  predictors_of_interest,
+  gene_annotation
+)
+
+# 7. Load genomic coordinates
+cat("Loading genomic coordinates...\n")
+genomic_data <- load_genomic_coordinates(
+  "~/ref/zea/Zea_mays.Zm-B73-REFERENCE-NAM-5.0.59.chr.gff3"
+)
+
+# 7. Apply statistical classifications
+cat("Applying statistical classifications...\n")
+logfc_thresholds <- c(
+  "general" = LOGFC_THRESHOLD_GENERAL,
+  "leaf_tissue" = LOGFC_THRESHOLD_TISSUE
+)
+
+effects <- classify_de_results(effects, logfc_thresholds, FDR_THRESHOLD)
+
+# 8. Merge effects with gene annotation
+effects <- effects %>%
+  mutate(desc_merged = coalesce(locus_name, desc)) %>%
+  select(predictor, regulation, Response, locus_symbol, desc_merged, everything()) %>%
+  rename(gene = Response) %>%
+  inner_join(
+    genomic_data$genes %>%
+      as.data.frame() %>%
+      select(
+        gene = gene_id,
+        CHR = seqnames,
+        BP = start
+      ) %>%
+      mutate(CHR = as.integer(as.character(CHR)))
+  )
+
+
+# 9. Add genomic location classifications
+effects <- effects %>%
+  mutate(
+    in_shared = CHR == 4 & 
+      (BP >= genomic_data$introgression_start) & 
+      (BP <= genomic_data$introgression_end),
+    in_inv4m = CHR == 4 & 
+      (BP >= genomic_data$inv4m_start) & 
+      (BP <= genomic_data$inv4m_end),
+    in_flanking = in_shared & !in_inv4m,
+    region = case_when(
+      in_inv4m ~ "inv4m",
+      in_flanking ~ "flanking",
+      TRUE ~ "outside"
+    )
+  )
+
+# 10. Add Mahalanobis outliers
+cat("Adding Mahalanobis outlier detection...\n")
+effects_with_outliers <- add_mahalanobis_outliers(effects)
+
+# 11. Generate summary outputs
+cat("Generating summary outputs...\n")
+
+# DEG summary
+deg_summary <- effects_with_outliers %>%
+  filter(is_significant & regulation != "Unregulated") %>%
+  mutate(
+    in_cis = gene %in% genomic_data$shared_introgression_genes,
+    in_trans = !in_cis,
+    in_Inv4m = gene %in% genomic_data$inv4m_genes
+  ) %>%
+  select(
+    predictor, regulation, gene, locus_symbol,
+    description = desc_merged, logFC, neglogP,
+    in_cis, in_trans, in_Inv4m
+  ) %>%
+  arrange(regulation, -neglogP, .by_group = TRUE) %>%
+  group_by(predictor, regulation) %>%
+  arrange(regulation, -neglogP, .by_group = TRUE)
+
+# Save results
+write.csv(
+  effects_with_outliers,
+  file.path(OUTPUT_DIR, "predictor_effects.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  deg_summary %>% filter(predictor == "GenotypeINV4"),
+  file.path(OUTPUT_DIR, "PSU_Inv4m_DEGs.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  deg_summary %>% filter(predictor == "Treatment-P"),
+  file.path(OUTPUT_DIR, "PSU_phosphorus_DEGs.csv"),
+  row.names = FALSE
+)
+
+cat("Analysis complete!\n")
+cat("Results saved to:\n")
+cat("- predictor_effects.csv: All effects with statistical classifications\n")
+cat("- PSU_Inv4m_DEGs.csv: Inv4m differential expression results\n")
+cat("- PSU_phosphorus_DEGs.csv: Phosphorus differential expression results\n")
+cat("- normalized_expression_logCPM.rda: Normalized log-CPM expression data\n")
+
+

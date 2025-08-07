@@ -14,7 +14,9 @@
       "Bash(timeout:*)",
       "Bash(mkdir:*)",
       "Bash(git commit:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__gemini-cli__fetch-chunk",
+      "mcp__gemini-cli__ask-gemini"
     ],
     "deny": []
   }

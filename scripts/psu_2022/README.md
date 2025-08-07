@@ -1,164 +1,88 @@
 # PSU 2022 Field Experiment Analysis
 
-This directory contains refactored scripts for the comprehensive multi-omics analysis of the PSU 2022 field experiment. The refactoring implements the standardized analytical framework described in `docs/analysis.md`, emphasizing consistency-focused approaches over condition-specific methods.
+This directory contains scripts for the comprehensive multi-omics analysis of the PSU 2022 field experiment. The experiment was designed to investigate the effects of the Inv4m chromosomal inversion on maize phenotypes under different environmental conditions.
 
 ## Scripts Overview
 
-### Core Spatial Analysis (`spatial_modeling/`)
+This directory is organized by data type.
 
-- **`analyze_psu_spatial_phenotypes.R`** - Main spatial phenotype analysis
-  - Implements spherical spatial correlation modeling for field experiments
-  - Uses comprehensive helper functions for multi-trait analysis
-  - Generates publication-ready visualizations and diagnostic plots
-  - **Status**: ✅ Refactored with FORMATTED version
+### Expression Analysis (`expression/`)
+- **`add_locus_label_descriptions.R`**: Adds descriptions to locus labels.
+- **`detect_rnaseq_consistent_degs.R`**: Detects consistently differentially expressed genes.
+- **`detect_rnaseq_fdr_degs.R`**: Detects differentially expressed genes using an FDR approach.
+- **`estimate_phenotype_mashr_effects.R`**: Estimates phenotype effects using mashr.
+- **`fastman_plots.R`**: Generates Manhattan plots.
+- **`make_gene_set_GO_analysis.R`**: Performs Gene Ontology analysis on gene sets.
+- **`make_manhattan_plots.R`**: Creates Manhattan plots.
+- **`make_volcano_plot.R`**: Creates volcano plots.
+- **`plot_deg_manhattan.R`**: Plots Manhattan plots for DEGs.
+- **`run_deg_linear_models.R`**: Runs linear models for differential expression.
+- **`run_rnaseq_mashr_leaf_analysis.R`**: Runs a mashr analysis on leaf RNA-seq data.
 
-- **`analyze_psu_ionome_spatial.R`** - Spatial ionome analysis  
-  - Spatial mixed-effects models for mineral concentration data
-  - Handles seed and stover tissue analysis with ratio calculations
-  - Comprehensive statistical validation and outlier detection
-  - **Status**: ✅ Refactored with FORMATTED version
+### Ionomics (`ionomics/`)
+- **`analyze_psu_ionome_multivariate.R`**: Performs multivariate analysis of ionome data.
+- **`correct_ionome_rack_effects.R`**: Corrects for rack effects in ionome data.
+- **`plot_p31_traditional_varieties.R`**: Plots P31 data for traditional varieties.
+- **`plot_p31_traditional_varieties_v2.R`**: An updated version of the P31 plotting script.
 
-### RNA-seq Analysis (`expression/`)
+### Lipids (`lipids/`)
+- **`check_internal_standards.R`**: Checks internal standards in lipidomics data.
+- **`clean_lipid_data_ms_dial_normalized.R`**: Cleans and normalizes lipidomics data from MS-DIAL.
 
-- **`detect_rnaseq_fdr_degs.R`** - Main differential expression analysis
-  - Standard FDR-based approach (NOT mashr) for consistent inv4m effects
-  - Comprehensive quality control with MDS analysis
-  - Genomic coordinate integration and cis/trans classification
-  - Mahalanobis outlier detection for robust gene identification
-  - **Status**: ✅ Refactored with FORMATTED version
-
-- **`detect_rnaseq_consistent_degs.R`** - Consistency-focused DEG detection  
-  - Framework for detecting robust effects across conditions
-  - Methodological distinction from mashr-based approaches
-  - **Status**: ✅ Refactored (framework established)
-
-### Supporting Analysis Scripts
-
-#### Ionomics (`ionomics/`)
-- **`analyze_psu_ionome_multivariate.R`** - Multivariate ionome analysis with PCA
-- **`correct_ionome_rack_effects.R`** - Technical batch effect correction
-- **`plot_p31_traditional_varieties*.R`** - Traditional variety comparisons
-- **Status**: ✅ Paths updated for consistency
-
-#### Lipidomics (`lipids/`)
-- **`run_lipidomics_mashr_analysis.R`** - mashr application to lipid profiles
-- **`clean_lipid_data*.R`** - Data processing and normalization pipelines  
-- **`lipid_ratio_analysis.R`** - Ratio-based lipid analysis
-- **Status**: ✅ Paths updated for consistency
-
-#### Network Analysis (`network/`)
-- **`build_netome_coexpression_networks.R`** - B73 co-expression network construction
-- **`make_GO_profile_*.R`** - Gene Ontology enrichment analysis
-- **`extract_gwas_network_hits.R`** - GWAS-network integration
-- **Status**: ✅ Ready for integration
-
-## Key Refactoring Improvements
-
-### 1. Consolidated Redundant Versions
-- Replaced original scripts with superior FORMATTED versions
-- Removed duplicate code and inconsistent implementations
-- Preserved original versions as `*_OLD.R` for reference
-
-### 2. Standardized File Paths
-- Updated hardcoded paths to use relative paths from project root
-- Created `common_config.R` for shared configuration settings
-- Fixed issues with `/Users/fvrodriguez/Desktop/Desktop/` patterns
-
-### 3. Enhanced Documentation  
-- Added comprehensive script headers with author and date
-- Improved function documentation with parameters and return values
-- Consistent commenting and code organization
-
-### 4. Methodological Consistency
-- Implemented consistent spatial correlation modeling across experiments
-- Standardized statistical approaches (FDR over mashr for robustness)
-- Unified diagnostic and visualization approaches
-
-### 5. Improved Error Handling
-- Added file validation and error checking
-- Graceful handling of missing optional files (e.g., PANNZER annotations)
-- Better progress reporting and logging
+### Other
+- **`common_config.R`**: Contains common configuration settings for the PSU 2022 analysis.
 
 ## Configuration and Setup
 
 ### Common Configuration (`common_config.R`)
-```r
-# Shared settings for all PSU 2022 scripts
+
+This file is essential for all scripts in this directory. It sets up paths, loads required libraries, and defines common variables.
+
+**Key settings:**
+- `BASE_DIR`: The base directory for the project.
+- `DATA_DIR`: The directory where data is stored.
+- `RESULTS_DIR`: The directory where results are saved.
+- `load_libraries()`: A function to load all necessary R packages.
+
+### Required Data
+
+To run these analyses, you will need the following data files (not included in this repository):
+
+- **Expression Data**: Raw RNA-seq data and corresponding metadata.
+- **Ionomics Data**: Ionomics measurements and sample information.
+- **Lipidomics Data**: Lipidomics profiles and associated metadata.
+
+These files should be placed in the appropriate subdirectories within the `data/` directory.
+
+### Running Analyses
+
+To run any of the analysis scripts, first ensure that the `common_config.R` file is correctly configured and that the required data is in place. Then, you can source the desired script from within an R session.
+
+**Example:**
+```R
+# Set the working directory to the psu_2022 directory
+setwd("scripts/psu_2022")
+
+# Source the common configuration
 source("common_config.R")
 
-# Key variables available:
-# - DATA_DIR: "../../data"  
-# - OUTPUT_DIR: "results_psu_2022"
-# - PHENOTYPE_FILES: List of common data files
-# - ANALYSIS_PARAMS: Standard thresholds and parameters
+# Run an analysis
+source("expression/detect_rnaseq_consistent_degs.R")
 ```
 
-### Required Data Files
-All scripts expect data files in `../../data/` relative to script location:
-- `inv4mRNAseq_gene_sample_exp.csv` - RNA-seq count matrix
-- `PSU-PHO22_Metadata.csv` - RNA-seq sample metadata
-- `22_NCS_PSU_LANGEBIO_FIELDS_PSU_P_field.csv` - Field phenotype data
-- `22_NCS_PSU_LANGEBIO_FIELDS_PSU_P_field_ear_pheno.csv` - Ear phenotype data
-- `PSU_inv4m_ionome_all.csv` - Ionome measurements
-- `PSU_inv4m_lipids.csv` - Lipidomics data
-- `gene_symbol.tab` - Gene annotation
+## Expected Outputs
 
-### Output Organization
-All results are saved to `results_psu_2022/` with standardized naming:
-- Model comparison tables: `*_model_comparison.csv`
-- Treatment effects: `*_treatment_effects.csv`  
-- Visualization plots: `*_plot.pdf`
-- Summary statistics: `*_summary_statistics.csv`
+The analysis scripts will generate various outputs, including:
 
-## Analysis Workflow
+- **Tables**: CSV files containing differential expression results, ionomics data, etc.
+- **Plots**: PDF and PNG files of Manhattan plots, volcano plots, and other visualizations.
+- **R Objects**: RDS files containing processed data and model fits.
 
-### 1. Spatial Phenotype Analysis
-```bash
-cd spatial_modeling/
-Rscript analyze_psu_spatial_phenotypes.R
-```
+These outputs will be saved in the `results/` directory, organized by data type.
 
-### 2. RNA-seq Differential Expression  
-```bash
-cd expression/
-Rscript detect_rnaseq_fdr_degs.R
-```
+## Notes
 
-### 3. Ionome Analysis
-```bash
-cd spatial_modeling/
-Rscript analyze_psu_ionome_spatial.R
-```
-
-### 4. Multi-omics Integration
-```bash
-cd network/
-Rscript build_netome_coexpression_networks.R
-```
-
-## Integration with Project Framework
-
-This refactored PSU 2022 analysis integrates with the broader inv4m project:
-
-1. **Consistent with Clayton 2025**: Uses same statistical framework and helper functions
-2. **Cross-Experiment Comparison**: Enables systematic comparison of inv4m effects across environments  
-3. **Standardized Outputs**: Compatible with meta-analysis and integration workflows
-4. **Documentation Standards**: Follows project-wide documentation conventions
-
-## Methodological Innovations
-
-The PSU 2022 analysis implements several key methodological advances:
-
-1. **Spatial-Aware Field Genomics**: Proper spherical correlation modeling for agricultural settings
-2. **Consistency-Focused Statistics**: Robust effects across conditions rather than condition-specific responses  
-3. **Integrated Multi-Omics**: Consistent analytical framework across RNA-seq, ionomics, and lipidomics
-4. **Network-Validated Results**: B73 co-expression integration for biological validation
-
-## Next Steps
-
-1. **Execute Complete Analysis Pipeline**: Run all refactored scripts with current data
-2. **Cross-Experiment Integration**: Compare PSU 2022 and Clayton 2025 results using consistent framework
-3. **Method Validation**: Validate spatial correlation approach effectiveness
-4. **Results Integration**: Incorporate into comprehensive inv4m analysis
-
-This refactored PSU 2022 analysis establishes the foundation for robust, reproducible multi-omics analysis of inv4m adaptive effects in field conditions.
+- The `_OLD` scripts are deprecated and should not be used for new analyses.
+- The `mashr` related scripts represent an alternative analysis approach that was explored but is not the primary method used in the final analysis.
+- The `ionomics` and `lipids` directories contain specialized scripts for those data types.
+- All scripts are designed to be run from the `psu_2022` directory.
