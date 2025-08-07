@@ -19,7 +19,7 @@ The project follows an **experiment-centric organization** with four main compon
 2. **Clayton Field Experiment 2025 (Environmental Comparison)**
    - **Status**: 🔄 Active development, spatial analysis implemented
    - **Design**: Replicated Latin Square in North Carolina climate
-   - **Data**: `data/CLY25_Inv4m.csv` - 9 phenotype traits with spatial coordinates
+   - **Input**: `data/CLY25_Inv4m.csv` (✅ Now available in data directory)
    - **Purpose**: Test environmental robustness of inv4m effects
 
 3. **Chamber Experiments (Developmental Analysis)**
@@ -31,6 +31,11 @@ The project follows an **experiment-centric organization** with four main compon
    - **Status**: ⏳ Framework prepared for temperature-response analysis
    - **Target**: PCNA2, MCM5 temperature responses in proliferating tissues
    - **Purpose**: Validate consistency approach against published mashr results
+   - **Notes for HPC Execution**:
+     - **Repository Setup**: Clone the entire repository to your dedicated working space on the HPC cluster.
+     - **Dependency Verification**: On the HPC, confirm the presence of Kallisto reference files (`Zm-B73-REFERENCE-NAM-5.0.cdna.all.idx` or `Zea_mays.Zm-B73-REFERENCE-NAM-5.0.cdna.all.fa`) in `~/ref/zea/`. Also, ensure SRA Toolkit (`prefetch`, `fastq-dump`) and `kallisto` are installed and in your PATH.
+     - **Conda Environment**: Activate the appropriate Conda environment containing the necessary tools before running scripts.
+     - **Execution Command**: Navigate to `scripts/crow_reanalysis/` and run `./process_crow2020_rnaseq.sh --threads <num_threads> --bootstrap <num_bootstrap_samples>`. Consider submitting this as an LSF job for resource management.
 
 ## 3. Core Methodological Framework
 
@@ -220,10 +225,9 @@ results/
 
 #### High Priority
 1. **✅ COMPLETED**: Move CLY25_Inv4m.csv to data directory
-2. **Execute Clayton 2025 Analysis**: Run complete spatial analysis with available dataset
-   - Primary: `docs/inv4m_field_modelling.Rmd`
-   - Supporting: `scripts/clayton_2025/phenotype_spatial_modeling/`
+2. **✅ COMPLETED**: Execute Clayton 2025 Analysis (Primary: `docs/inv4m_field_modelling.Rmd`, Supporting: `scripts/clayton_2025/phenotype_spatial_modeling/`)
 3. **Generate Cross-Environment Results**: Compare PSU vs Clayton inv4m effects
+4. **Get Crow 2020 Gene Expression Matrix**: Obtain the gene expression matrix for Crow 2020 data.
 
 ### 7.2. Short-Term Goals (Cross-Experiment Integration)
 
@@ -244,6 +248,78 @@ results/
 1. **Update Analysis Documentation**: Align with current implementation
 2. **Consolidate Script Versions**: Remove redundant `_FORMATTED` versions  
 3. **Create Cross-Experiment Vignettes**: Document integrated analysis workflows
+4. **Document Conda Environments**: Specify Conda environments required for HPC cluster scripts.
+   To ensure reproducibility and avoid version clashes, we use a minimal Conda environment strategy, separating R packages from command-line bioinformatics tools.
+
+   **Conda Environment Strategy:**
+
+   *   **`inv4m_r_env` (for R and R packages)**:
+       - **Purpose**: Houses R and all R packages for analysis scripts (e.g., `clayton_spatial_analysis.R`, `detect_crow2020_consistency_degs.R`, `inv4m_field_modelling.Rmd`).
+       - **Rationale**: R packages have specific R version requirements and can conflict if mixed with other language environments or compiled tools.
+       - **`inv4m_r_env.yml`** (create this file in your project root):
+         ```yaml
+         name: inv4m_r_env
+         channels:
+           - conda-forge
+           - bioconda
+           - defaults
+         dependencies:
+           - r-base=4.3.2 # Specify R version to match your development environment
+           - r-essentials # Includes many common R packages
+           - r-dplyr
+           - r-ggplot2
+           - r-ape
+           - r-emmeans
+           - r-gstat
+           - r-nlme
+           - r-rlang
+           - r-tidyr
+           - r-readr
+           - bioconductor-edger # For edgeR
+           - bioconductor-limma # For limma
+           - bioconductor-tximport # For tximport
+           - bioconductor-rtracklayer # For rtracklayer
+           - bioconductor-genomicranges # For GenomicRanges
+           - r-vim # For VIM package
+           - r-knitr
+           - r-rmarkdown
+           - r-ggpubr
+           - r-ggtext
+           - r-viridis # For viridis color palettes
+           - r-corrplot # For correlation plots
+           - r-pheatmap # For heatmaps
+           # Add any other R packages you might use that are not covered by r-essentials
+         ```
+
+   *   **`inv4m_bio_tools_env` (for Bioinformatics Command-Line Tools)**:
+       - **Purpose**: Contains all command-line bioinformatics tools used in shell scripts (e.g., `process_crow2020_rnaseq.sh`, GATK pipelines).
+       - **Rationale**: Tools like SRA Toolkit, Kallisto, GATK, and STAR are often compiled binaries with specific system library dependencies. Isolating them prevents conflicts.
+       - **`inv4m_bio_tools_env.yml`** (create this file in your project root):
+         ```yaml
+         name: inv4m_bio_tools_env
+         channels:
+           - conda-forge
+           - bioconda
+           - defaults
+         dependencies:
+           - sra-tools # Includes prefetch, fastq-dump
+           - kallisto
+           - gatk # For GATK tools (variant calling, etc.)
+           - bwa # If used for alignment
+           - samtools # Essential for BAM/SAM manipulation
+           - picard # Often used with GATK for BAM processing
+           - star # For STAR aligner (RNA-seq alignment)
+           # Add any other command-line tools you use (e.g., bedtools, vcftools)
+         ```
+
+   **Implementation Steps:**
+   1.  **Create the `environment.yml` files**: Copy the content above into `inv4m_r_env.yml` and `inv4m_bio_tools_env.yml` in your project's root directory.
+   2.  **Install the environments**: On your HPC cluster (after loading the `conda` module, if necessary), navigate to your project directory and run:
+       ```bash
+       conda env create -f inv4m_r_env.yml
+       conda env create -f inv4m_bio_tools_env.yml
+       ```
+   3.  **Activate the environments**: Before running any R script, activate the R environment: `conda activate inv4m_r_env`. Before running any shell script that uses bioinformatics tools, activate the bioinformatics tools environment: `conda activate inv4m_bio_tools_env`.
 
 ### 7.3. Medium-Term Objectives (Advanced Framework Development)
 

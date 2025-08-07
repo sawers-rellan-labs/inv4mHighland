@@ -117,5 +117,8 @@ Phase 1: Core framework using PSU 2022 scripts
 Phase 2: Cross-experiment using Clayton 2025 spatial modeling
 Phase 3: Crow reanalysis validation
 
+### use gemini to get project status
+Use gemini, if allowed to work on current quota, to make a summary of the current state of the project  update  @docs/project_status_and_workflow.md,
+center on the changes logged into the commits made since  @docs/project_status_and_workflow.md was last updated
 
 

@@ -155,4 +155,102 @@ Core analysis packages commonly used across scripts:
 3. Statistical analysis (`psu_2022/expression/`, `psu_2022/spatial_modeling/`)
 4. Network integration and visualization (`psu_2022/network/`)
 
+# Using Gemini MCP Tool for Large Codebase Analysis
+
+When analyzing large codebases or multiple files that might exceed context limits, use the `gemini-mcp-tool` to leverage Google Gemini's large context capacity through the MCP interface.
+
+## File and Directory Inclusion Syntax
+
+Use the `@` syntax to include files and directories in your Gemini prompts via the MCP tool. The paths should be relative to the working directory:
+
+### Examples:
+
+**Single file analysis:**
+```
+gemini-mcp-tool query="@src/main.py Explain this file's purpose and structure"
+```
+
+**Multiple files:**
+```
+gemini-mcp-tool query="@package.json @src/index.js Analyze the dependencies used in the code"
+```
+
+**Entire directory:**
+```
+gemini-mcp-tool query="@src/ Summarize the architecture of this codebase"
+```
+
+**Multiple directories:**
+```
+gemini-mcp-tool query="@src/ @tests/ Analyze test coverage for the source code"
+```
+
+**Current directory and subdirectories:**
+```
+gemini-mcp-tool query="@./ Give me an overview of this entire project"
+```
+
+## Implementation Verification Examples
+
+**Check if a feature is implemented:**
+```
+gemini-mcp-tool query="@src/ @lib/ Has dark mode been implemented in this codebase? Show me the relevant files and functions"
+```
+
+**Verify authentication implementation:**
+```
+gemini-mcp-tool query="@src/ @middleware/ Is JWT authentication implemented? List all auth-related endpoints and middleware"
+```
+
+**Check for specific patterns:**
+```
+gemini-mcp-tool query="@src/ Are there any React hooks that handle WebSocket connections? List them with file paths"
+```
+
+**Verify error handling:**
+```
+gemini-mcp-tool query="@src/ @api/ Is proper error handling implemented for all API endpoints? Show examples of try-catch blocks"
+```
+
+**Check for rate limiting:**
+```
+gemini-mcp-tool query="@backend/ @middleware/ Is rate limiting implemented for the API? Show the implementation details"
+```
+
+**Verify caching strategy:**
+```
+gemini-mcp-tool query="@src/ @lib/ @services/ Is Redis caching implemented? List all cache-related functions and their usage"
+```
+
+**Check for specific security measures:**
+```
+gemini-mcp-tool query="@src/ @api/ Are SQL injection protections implemented? Show how user inputs are sanitized"
+```
+
+**Verify test coverage for features:**
+```
+gemini-mcp-tool query="@src/payment/ @tests/ Is the payment processing module fully tested? List all test cases"
+```
+
+## When to Use Gemini MCP Tool
+
+Use `gemini-mcp-tool` when:
+- Analyzing entire codebases or large directories
+- Comparing multiple large files
+- Need to understand project-wide patterns or architecture
+- Current context window is insufficient for the task
+- Working with files totaling more than 100KB
+- Verifying if specific features, patterns, or security measures are implemented
+- Checking for the presence of certain coding patterns across the entire codebase
+- Getting high-level summaries before detailed analysis with Claude
+
+## Important Notes
+
+- Paths in `@` syntax are relative to the current working directory
+- The MCP tool will pass file contents directly to Gemini's context
+- Gemini's context window can handle entire codebases that would overflow Claude's context
+- When checking implementations, be specific about what you're looking for to get accurate results
+- Use this tool for initial reconnaissance and broad analysis, then use Claude for detailed implementation work
+- The tool is read-only and safe for analysis tasks
+
 This repository represents a comprehensive genomics analysis framework emphasizing spatial-aware statistics and consistency-focused differential expression analysis for agricultural field experiments.

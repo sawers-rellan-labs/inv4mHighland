@@ -231,3 +231,84 @@ create_model_comparison <- function(models) {
   
   return(comparison)
 }
+
+#' Safely extract fixed effects
+#' 
+#' Safely extracts fixed effects from model objects with error handling
+#' 
+#' @param model Model object
+#' 
+#' @return Vector of fixed effects or NULL
+#' @export
+safe_fixef <- function(model) {
+  tryCatch({
+    if (inherits(model, c("lme", "gls"))) {
+      return(fixef(model))
+    } else if (inherits(model, "lm")) {
+      return(coef(model))
+    } else {
+      return(NULL)
+    }
+  }, error = function(e) {
+    return(NULL)
+  })
+}
+
+#' Safely extract variance-covariance matrix
+#' 
+#' Safely extracts vcov matrix with error handling
+#' 
+#' @param model Model object
+#' 
+#' @return Variance-covariance matrix or NULL
+#' @export
+safe_vcov <- function(model) {
+  tryCatch({
+    return(vcov(model))
+  }, error = function(e) {
+    return(NULL)
+  })
+}
+
+#' Export spatial model results
+#' 
+#' Exports spatial analysis results to specified directory
+#' 
+#' @param results List containing spatial analysis results
+#' @param output_dir Directory for saving results
+#' @param verbose Whether to print progress messages
+#' 
+#' @export
+export_spatial_results <- function(results, output_dir, verbose = TRUE) {
+  if (verbose) cat("=== EXPORTING SPATIAL RESULTS ===\n")
+  
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # Save model statistics
+  if (!is.null(results$model_stats) && nrow(results$model_stats) > 0) {
+    write.csv(results$model_stats, file.path(output_dir, "all_model_statistics.csv"), row.names = FALSE)
+  }
+  
+  # Save missing data summary  
+  if (!is.null(results$missing_summary)) {
+    write.csv(results$missing_summary, file.path(output_dir, "missing_data_summary.csv"), row.names = FALSE)
+  }
+  
+  # Save variogram summary
+  if (!is.null(results$variogram_results) && length(results$variogram_results) > 0) {
+    vgm_summary <- purrr::map_dfr(results$variogram_results, function(x) {
+      tibble(
+        phenotype = x$phenotype,
+        n_obs = x$n_obs,
+        max_semivariance = round(x$max_gamma, 3)
+      )
+    })
+    write.csv(vgm_summary, file.path(output_dir, "variogram_summary.csv"), row.names = FALSE)
+  }
+  
+  if (verbose) {
+    cat("Spatial analysis results exported to:", output_dir, "\n")
+  }
+}

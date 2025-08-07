@@ -1,111 +1,172 @@
 # Clayton 2025 Phenotype Spatial Modeling
 
-This directory contains refactored scripts for spatial analysis of the Clayton 2025 field experiment. The refactoring implements the standardized spatial analysis framework described in `docs/analysis.md`.
+This directory demonstrates the modernized spatial analysis workflow using the **inv4mHighland R package**. The previous scattered script approach has been replaced with a streamlined, package-based methodology.
 
-## Scripts Overview
+## Current Status: Package-Based Workflow
 
-### Core Analysis Scripts
+### Active Script
 
-- **`fit_cly25_spatial_correlation_models.R`** - Main spatial modeling script
-  - Fits hierarchical model comparison for multiple traits
-  - Uses standardized spatial analysis framework from PSU 2022
-  - Generates comprehensive diagnostic plots and model comparisons
-  - Exports results to `results_clayton_2025/` directory
+- **`fit_spatial_model_per_plant.R`** - **UPDATED** to use inv4mHighland package
+  - Single function call: `run_clayton_spatial_analysis()`
+  - Reduced from 700+ lines to ~100 lines
+  - Automatic error handling and progress reporting
+  - Comprehensive analysis pipeline with all original functionality
+  - Exports results to `results_clayton_2025_package/` directory
 
-- **`analyze_cly25_phenotypes.R`** - Phenotype visualization and basic statistics
-  - Creates publication-ready trait plots with statistical annotations
-  - Generates summary statistics across genotype and donor combinations
-  - Exports individual plots and summary tables
+### Deprecated Scripts (Functionality Now in Package)
 
-### Helper Functions and Setup
+- **`plot_pairwise_comparisons.R.deprecated`** - Replaced by package visualization functions
+  - Functionality now available through `run_clayton_spatial_analysis()`
+  - Treatment effect plots generated automatically
+  - More robust statistical testing and visualization
 
-- **`spatial_correlation_helpers.R`** - Reusable function library
-  - Contains standardized functions for spatial analysis
-  - Implements hierarchical model fitting with multiple correlation structures
-  - Provides comprehensive diagnostic tools
-  - Uses consistent API across experiments
+- **`plot_spatial_layout_CLY25.R.deprecated`** - Replaced by `show_spatial_distribution()`
+  - Multi-trait spatial visualization with organized layout
+  - Custom trait labeling and consistent formatting
+  - Automatic trait selection and display optimization
 
-- **`setup_package_dependencies.R`** - Package installation and validation
-  - Ensures all required packages are installed
-  - Validates data file availability
-  - Provides setup instructions
-
-## Key Refactoring Changes
-
-### 1. Removed Redundancy
-- Eliminated duplicate `_FORMATTED` version of helper functions
-- Consolidated repetitive model fitting code into reusable functions
-
-### 2. Standardized Framework
-- Implemented consistent spatial analysis approach from PSU 2022 experiment
-- Uses hierarchical model comparison (Null → Treatment → Block → Trends → Random Effects → Spatial)
-- Standardized diagnostic plots and model evaluation metrics
-
-### 3. Improved Data Handling
-- Fixed hardcoded file paths to use relative paths from project root
-- Added data validation and error handling
-- Consistent factor level ordering
-
-### 4. Enhanced Documentation
-- Added comprehensive function documentation with parameters and return values
-- Improved code comments and structure
-- Created standardized analysis workflow
-
-### 5. Error Fixes
-- Fixed typo in residual plot code (`alPHa` → `alpha`)
-- Added input validation to prevent common errors
-- Improved error messages and debugging information
-
-## Usage
+## Package-Based Analysis Workflow
 
 ### Prerequisites
-```bash
-# From the phenotype_spatial_modeling directory
-Rscript setup_package_dependencies.R
+
+```r
+# Install and load the inv4mHighland package
+# (Package should be installed from the project root)
+library(inv4mHighland)
+library(tidyverse)
 ```
 
 ### Run Complete Analysis
-```r
-# Load and run spatial correlation analysis
-source("fit_cly25_spatial_correlation_models.R")
 
-# Generate phenotype plots and summaries  
-source("analyze_cly25_phenotypes.R")
+```r
+# Single function call replaces all previous scripts
+results <- run_clayton_spatial_analysis(
+  data_file = "../../../data/CLY25_Inv4m.csv",
+  output_dir = "results_clayton_2025_package",
+  trait_names = c("DTA", "DTS", "LAE", "PH", "EN", "SL", "BL", "BW", "EBA"),
+  use_variogram = TRUE,
+  create_plots = TRUE,
+  export_results = TRUE
+)
 ```
 
-### Use Helper Functions
-```r
-# Load helper functions
-source("spatial_correlation_helpers.R")
+### Advanced Usage (Individual Functions)
 
-# Example usage
-models <- fit_model_hierarchy(data, response = "PH")
-comparison <- create_model_comparison(models)
-diagnostics <- residual_diagnostics(models[[1]], data, "PH")
+```r
+# Use package functions independently if needed
+library(inv4mHighland)
+
+# Load and clean data
+field_data <- load_clayton_data("../../../data/CLY25_Inv4m.csv")
+
+# Calculate variograms for multiple traits
+vgm_results <- calculate_scaled_variogram(field_data, c("DTA", "DTS", "PH"))
+
+# Fit spatial models with model comparison
+models <- fit_all_models(field_data, "PH")
+model_stats <- extract_model_stats(models, "PH")
+
+# Create visualizations
+show_spatial_distribution(field_data, c("DTA", "DTS", "PH"))
+
+# Extract treatment effects
+effects <- extract_treatment_effects_emmeans(models, "model_6", "PH")
 ```
+
+## Package Functions Overview
+
+### Core Analysis Functions
+- `run_clayton_spatial_analysis()` - Master workflow function
+- `fit_all_models()` - Hierarchical model comparison  
+- `calculate_scaled_variogram()` - Multi-trait variogram analysis
+- `extract_model_stats()` - Model comparison statistics
+- `extract_treatment_effects()` - Treatment effect quantification
+
+### Visualization Functions
+- `show_spatial_distribution()` - Multi-trait spatial plots (3 per row)
+- `create_spatial_plot()` - Individual trait spatial visualization
+- `residual_diagnostics()` - Model diagnostic plots
+
+### Utility Functions
+- `load_clayton_data()` - Data loading with validation
+- `validate_analysis_setup()` - Dependency checking
+- `create_model_comparison()` - Model comparison tables
+- `create_publication_table()` - Publication-ready results
+
+## Analysis Pipeline
+
+The package implements a comprehensive analysis pipeline:
+
+1. **Data Loading & Cleaning**
+   - Automatic factor conversion and coordinate centering
+   - EBA calculation (Estimated Blade Area = 0.75 × BL × BW)
+   - Missing data assessment and validation
+
+2. **Spatial Analysis**
+   - Scaled variogram calculation for spatial autocorrelation assessment
+   - Six hierarchical models: Null → Treatment → Block → Trends → Random Effects → Spatial
+   - Automatic model selection using BIC
+
+3. **Treatment Effects**
+   - Treatment effect extraction using optimal models
+   - Emmeans-based contrasts for inv4m vs. control comparisons
+   - Multiple testing correction and significance assessment
+
+4. **Visualization & Diagnostics**
+   - Spatial distribution plots for all traits
+   - Residual diagnostics for model validation
+   - Forest plots for treatment effects
+   - Comprehensive diagnostic assessments
+
+5. **Results Export**
+   - Model comparison tables
+   - Treatment effect summaries
+   - Missing data reports
+   - Comprehensive analysis reports
 
 ## Output Structure
 
-Results are saved to `results_clayton_2025/`:
-- `*_model_comparison.csv` - AIC/BIC comparison tables for each trait
-- `*_treatment_effects.csv` - Treatment effect estimates and statistics
-- `*_plot.pdf` - Individual trait visualization plots
-- `trait_summary_statistics.csv` - Summary statistics by treatment
-- `analysis_summary.txt` - Comprehensive analysis report
+Results are saved to `results_clayton_2025_package/`:
+- `all_model_statistics.csv` - Complete model comparison results
+- `best_models_selection.csv` - Best model for each trait
+- `significant_treatment_effects.csv` - Significant treatment effects
+- `missing_data_summary.csv` - Missing data patterns
+- `variogram_summary.csv` - Spatial autocorrelation patterns
+- `comprehensive_analysis_summary.txt` - Human-readable report
+- Multiple diagnostic and visualization plots
+
+## Advantages of Package-Based Approach
+
+✅ **Code Reduction**: 700+ lines reduced to ~20 functional lines
+✅ **Error Handling**: Automatic validation and robust error management
+✅ **Consistency**: Standardized parameters and outputs across analyses
+✅ **Documentation**: Complete roxygen2 documentation for all functions
+✅ **Modularity**: Functions can be used independently or as complete pipeline
+✅ **Reproducibility**: Identical results across different users and systems
+✅ **Maintainability**: Updates to methodology automatically available to all scripts
+✅ **Extensibility**: Easy adaptation to new experiments and traits
 
 ## Integration with Project Framework
 
-This refactored code integrates with the overall inv4m project framework:
+This package-based approach provides a template for modernizing other experimental analyses:
 
-1. **Consistent with PSU 2022 Analysis**: Uses the same statistical approach and helper functions
-2. **Follows Naming Conventions**: Verb-based script names, noun-based helper functions  
-3. **Standardized Outputs**: Compatible with cross-experiment comparison workflows
-4. **Documentation Standards**: Follows project documentation and commenting standards
+1. **Consistent Methodology**: Same spatial analysis approach across all experiments
+2. **Standardized Interface**: Common function signatures and parameters
+3. **Cross-Experiment Compatibility**: Results can be easily compared across studies
+4. **Future Development**: New features automatically available to all analyses
 
-## Next Steps
+## Migration Notes
 
-1. **Cross-Experiment Integration**: Compare Clayton 2025 results with PSU 2022 using standardized framework
-2. **Method Validation**: Validate spatial correlation approach effectiveness
-3. **Results Integration**: Incorporate findings into comprehensive inv4m analysis
+**For users familiar with the old scripts:**
+- All original functionality is preserved and enhanced
+- Results format remains compatible with downstream analyses
+- Individual functions can still be called for custom workflows
+- Deprecated scripts remain available with `.deprecated` extension for reference
 
-This refactoring establishes Clayton 2025 as a fully integrated component of the inv4m research program's spatial analysis framework.
+**For new users:**
+- Start with `run_clayton_spatial_analysis()` for complete analysis
+- Refer to function documentation: `?run_clayton_spatial_analysis`
+- Use `show_spatial_distribution()` for quick trait visualization
+- Check package vignettes for detailed examples
+
+This modernization establishes Clayton 2025 as the reference implementation for the inv4mHighland spatial analysis framework.

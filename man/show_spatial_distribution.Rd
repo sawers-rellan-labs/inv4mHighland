@@ -9,7 +9,7 @@ show_spatial_distribution(data, traits, force_all = FALSE, max_traits = 30)
 \arguments{
 \item{data}{Dataset containing the phenotypes and spatial coordinates (x, y)}
 
-\item{traits}{Vector of trait names to plot}
+\item{traits}{Vector of trait names to plot, or named vector where names are full descriptions}
 
 \item{force_all}{Logical, whether to force plotting more than 9 traits (default: FALSE)}
 

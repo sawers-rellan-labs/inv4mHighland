@@ -1,6 +1,6 @@
 #' Model Diagnostics Functions
 #'
-#' Functions for creating diagnostic plots and testing model assumptions.
+#' Functions for creating diagnostic plots, testing model assumptions, and assessing missing data.
 
 #' Comprehensive residual diagnostics
 #' 
@@ -106,4 +106,71 @@ extract_variance_components <- function(models) {
   } else {
     return(NULL)
   }
+}
+
+#' Assess missing data patterns
+#' 
+#' Creates comprehensive missing data assessment for multiple phenotypes
+#' 
+#' @param data Dataset to assess
+#' @param phenotypes Vector of phenotype column names
+#' @param verbose Whether to print progress messages
+#' 
+#' @return List containing missing data summary and diagnostic plots
+#' @export
+#' @import dplyr
+#' @import ggplot2
+assess_missing_data <- function(data, phenotypes, verbose = TRUE) {
+  if (verbose) cat("=== MISSING DATA ASSESSMENT ===\n")
+  
+  # Create missing data summary
+  missing_summary <- data %>%
+    select(all_of(phenotypes)) %>%
+    summarise(across(everything(), ~sum(is.na(.)))) %>%
+    pivot_longer(everything(), names_to = "phenotype", values_to = "missing_count") %>%
+    mutate(
+      total_obs = nrow(data),
+      missing_pct = round(missing_count / total_obs * 100, 1),
+      available_n = total_obs - missing_count
+    )
+  
+  if (verbose) print(missing_summary)
+  
+  # Check for systematic missing data by treatment
+  if (all(c("donor", "inv4m") %in% names(data))) {
+    missing_by_treatment <- data %>%
+      select(donor, inv4m, all_of(phenotypes)) %>%
+      group_by(donor, inv4m) %>%
+      summarise(across(all_of(phenotypes), ~sum(is.na(.))), .groups = 'drop')
+    
+    if (verbose) {
+      cat("\nMissing data counts by treatment combination:\n")
+      print(missing_by_treatment)
+    }
+  } else {
+    missing_by_treatment <- NULL
+  }
+  
+  # Spatial distribution of missing data
+  missing_spatial_plot <- NULL
+  if (all(c("x", "y") %in% names(data))) {
+    missing_spatial_plot <- data %>%
+      select(x, y, all_of(phenotypes)) %>%
+      mutate(any_missing = rowSums(is.na(select(., all_of(phenotypes)))) > 0) %>%
+      ggplot(aes(x = x, y = y, color = any_missing)) +
+      geom_point(alpha = 0.7) +
+      scale_color_manual(values = c("FALSE" = "blue", "TRUE" = "red")) +
+      labs(title = "Spatial distribution of missing observations",
+           color = "Has missing\ndata") +
+      theme_classic() +
+      coord_equal()
+    
+    if (verbose) print(missing_spatial_plot)
+  }
+  
+  return(list(
+    summary = missing_summary,
+    by_treatment = missing_by_treatment,
+    spatial_plot = missing_spatial_plot
+  ))
 }

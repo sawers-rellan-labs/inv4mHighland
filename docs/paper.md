@@ -1,7 +1,4 @@
----
-bibliography:
-- Inv4mPhosphorus.bib
----
+
 
 ::: flushleft
 **Introgression of a Mexican highland chromosomal inversion into

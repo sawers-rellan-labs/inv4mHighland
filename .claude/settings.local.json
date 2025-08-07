@@ -12,7 +12,9 @@
       "Bash(chmod:*)",
       "Bash(./process_crow2020_rnaseq.sh:*)",
       "Bash(timeout:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git commit:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
