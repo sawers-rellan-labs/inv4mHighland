@@ -32,20 +32,6 @@ field_data <- data.frame(
   PH = rnorm(100, 200, 20)
 )
 
-# Run the complete Clayton 2025 spatial analysis
-# Replace 'field_data' with your actual data
-results <- run_clayton_spatial_analysis(
-  data = field_data,
-  output_dir = "results_clayton_2025"
-)
-
-# Or analyze specific phenotypes
-results <- run_clayton_spatial_analysis(
-  data = field_data,
-  phenotypes = c("DTA", "PH"),
-  create_plots = TRUE
-)
-```
 
 ## Package Structure
 

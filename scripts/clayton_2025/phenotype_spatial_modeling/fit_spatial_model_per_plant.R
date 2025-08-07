@@ -113,7 +113,9 @@ if (length(variogram_results) > 0) {
 
 # Comprehensive Model Comparison ----
 cat("\n=== COMPREHENSIVE MODEL COMPARISON ===\n")
-all_models <- analyze_multiple_traits(field_data, phenotypes_to_analyze, verbose = TRUE)
+all_models <- fit_spatial_models_by_trait(
+  field_data, phenotypes_to_analyze, verbose = TRUE
+  )
 
 # Extract model statistics
 all_model_stats <- tibble()
@@ -331,7 +333,3 @@ cat("- variogram_summary.csv: Spatial autocorrelation summary\n")
 cat("- clayton_2025_analysis_summary.txt: Human-readable report\n")
 cat("- scaled_variograms_all_traits.png: Variogram visualization\n")
 cat("- Multiple spatial distribution and diagnostic plots\n\n")
-
-cat("This analysis successfully demonstrates the power of the inv4mHighland package\n")
-cat("for comprehensive spatial analysis while keeping dataset-specific logic\n")
-cat("in the analysis script where it belongs.\n")
