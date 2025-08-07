@@ -152,35 +152,9 @@ Comparing spatial autocorrelation patterns across phenotypes using standardized 
 ### 4.1. Calculate Scaled Variograms
 
 ```{r calculate-variograms}
-# Calculate scaled variograms for each phenotype using package function
-variogram_results <- list()
-
-cat("=== CALCULATING VARIOGRAMS FOR ALL TRAITS ===\n")
-for (trait in phenotypes) {
-  cat("Processing variogram for", trait, "...\n")
-  
-  # Create complete-case dataset for this trait
-  trait_data <- field_data %>%
-    filter(!is.na(.data[[trait]]) & 
-           !is.na(x) & !is.na(y) & 
-           !is.na(donor) & !is.na(inv4m) & 
-           !is.na(block))
-  
-  cat("  Sample size:", nrow(trait_data), "\n")
-  
-  if (nrow(trait_data) > 10) {  # Minimum observations for variogram
-    tryCatch({
-      variogram_results[[trait]] <- calculate_scaled_variogram(trait_data, trait)
-      cat("  Successfully calculated variogram\n")
-    }, error = function(e) {
-      cat("  ERROR calculating variogram:", e$message, "\n")
-    })
-  } else {
-    cat("  Warning: Insufficient data for", trait, "(need > 10 observations)\n")
-  }
-}
-
-cat("\nVariograms calculated for:", length(variogram_results), "traits\n")
+# Calculate scaled variograms for all phenotypes using enhanced package function
+# This function now handles multiple traits internally and returns results for all successful calculations
+variogram_results <- calculate_scaled_variogram(field_data, phenotypes)
 
 # Create summary table with error handling
 if (length(variogram_results) > 0) {

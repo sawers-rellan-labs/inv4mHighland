@@ -2,19 +2,66 @@
 #'
 #' Functions for spatial variogram calculation and analysis.
 
-#' Calculate scaled variogram for a phenotype
+#' Calculate scaled variogram for one or multiple phenotypes
 #' 
 #' Calculates empirical variogram of model residuals and scales to 0-100
-#' for comparison across traits
+#' for comparison across traits. Can handle single trait or multiple traits.
 #' 
-#' @param data Complete-case dataset for the phenotype
-#' @param phenotype_name Name of the phenotype column
+#' @param data Complete-case dataset for the phenotype(s)
+#' @param phenotype_names Name of the phenotype column (character) or vector of phenotype names
 #' 
-#' @return List containing variogram data and scaling info
+#' @return List containing variogram data and scaling info. If multiple phenotypes 
+#'         provided, returns named list with results for each successful calculation.
 #' @export
 #' @import gstat
 #' @import dplyr
-calculate_scaled_variogram <- function(data, phenotype_name) {
+calculate_scaled_variogram <- function(data, phenotype_names) {
+  
+  # Handle single phenotype (backward compatibility)
+  if (length(phenotype_names) == 1) {
+    return(calculate_single_variogram(data, phenotype_names))
+  }
+  
+  # Handle multiple phenotypes
+  variogram_results <- list()
+  
+  cat("=== CALCULATING VARIOGRAMS FOR", length(phenotype_names), "TRAITS ===\n")
+  
+  for (trait in phenotype_names) {
+    cat("Processing variogram for", trait, "...\n")
+    
+    # Create complete-case dataset for this trait
+    trait_data <- data %>%
+      filter(!is.na(.data[[trait]]) & 
+             !is.na(x) & !is.na(y) & 
+             !is.na(donor) & !is.na(inv4m) & 
+             !is.na(block))
+    
+    cat("  Sample size:", nrow(trait_data), "\n")
+    
+    if (nrow(trait_data) > 10) {  # Minimum observations for variogram
+      tryCatch({
+        variogram_results[[trait]] <- calculate_single_variogram(trait_data, trait)
+        cat("  Successfully calculated variogram\n")
+      }, error = function(e) {
+        cat("  ERROR calculating variogram:", e$message, "\n")
+      })
+    } else {
+      cat("  Warning: Insufficient data for", trait, "(need > 10 observations)\n")
+    }
+  }
+  
+  cat("\nVariograms calculated for:", length(variogram_results), "out of", length(phenotype_names), "traits\n")
+  return(variogram_results)
+}
+
+#' Internal function to calculate variogram for a single phenotype
+#' 
+#' @param data Complete-case dataset for the phenotype
+#' @param phenotype_name Name of the phenotype column
+#' @return List containing variogram data and scaling info
+#' @keywords internal
+calculate_single_variogram <- function(data, phenotype_name) {
   
   # Fit simple model to get residuals
   formula_str <- paste(phenotype_name, "~ donor * inv4m")
