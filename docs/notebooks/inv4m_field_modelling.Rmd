@@ -219,54 +219,9 @@ if (length(variogram_results) > 0) {
 ### 5.1. Create Spatial Distribution Plots
 
 ```{r spatial-plots, fig.cap="Spatial distribution of phenotypes across the experimental field"}
-# Create spatial plots for all available traits using package function
-if (all(c("x", "y") %in% names(field_data))) {
-  # Define trait labels for plotting
-  trait_labels <- list(
-    DTA = "Days to Anthesis", DTS = "Days to Silking", LAE = "Leaves Above Ear",
-    PH = "Plant Height", EN = "Ear Number", SL = "Sheath Length", 
-    BL = "Blade Length", BW = "Blade Width", EBA = "Estimated Blade Area"
-  )
-  
-  # Create all spatial plots
-  spatial_plots <- list()
-  for (trait in phenotypes) {
-    if (trait %in% names(trait_labels)) {
-      plot_title <- trait_labels[[trait]]
-      spatial_plots[[trait]] <- create_spatial_plot(field_data, !!sym(trait), plot_title, trait)
-    }
-  }
-  
-  # Display plots in groups of three
-  plot_names <- names(spatial_plots)
-  for (i in seq(1, length(plot_names), by = 3)) {
-    group_plots <- list()
-    group_names <- plot_names[i:min(i+2, length(plot_names))]
-    
-    for (j in seq_along(group_names)) {
-      plot_name <- group_names[j]
-      if (j == 1) {
-        group_plots[[j]] <- spatial_plots[[plot_name]]
-      } else {
-        # Remove y-axis labels for plots 2 and 3 in each group
-        group_plots[[j]] <- spatial_plots[[plot_name]] + 
-          theme(axis.title.y = element_blank(), 
-                axis.text.y = element_blank(), 
-                axis.ticks.y = element_blank())
-      }
-    }
-    
-    # Arrange and print the group
-    if (length(group_plots) > 1) {
-      group_arranged <- do.call(ggarrange, c(group_plots, list(nrow = 1)))
-      print(group_arranged)
-    } else {
-      print(group_plots[[1]])
-    }
-  }
-} else {
-  cat("No spatial coordinates available for spatial plots\n")
-}
+# Create spatial plots for all traits using the enhanced package function
+# This function handles trait validation, plotting, and grouping automatically
+show_spatial_distribution(field_data, phenotypes)
 ```
 
 ## 6. Comprehensive Model Comparison
