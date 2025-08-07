@@ -65,7 +65,7 @@ plot_trait_spatial <- function(data, trait, title, midpoint = NULL) {
 #' request plotting up to 30 traits maximum.
 #' 
 #' @param data Dataset containing the phenotypes and spatial coordinates (x, y)
-#' @param traits Vector of trait names to plot
+#' @param traits Vector of trait names to plot, or named vector where names are full descriptions
 #' @param force_all Logical, whether to force plotting more than 9 traits (default: FALSE)
 #' @param max_traits Maximum number of traits to plot when force_all=TRUE (default: 30)
 #' 
@@ -83,9 +83,20 @@ show_spatial_distribution <- function(data, traits, force_all = FALSE, max_trait
     return(invisible(NULL))
   }
   
+  # Handle named vector - extract trait names and custom labels
+  custom_labels <- NULL
+  trait_names <- traits
+  
+  if (!is.null(names(traits)) && any(names(traits) != "")) {
+    custom_labels <- names(traits)
+    names(custom_labels) <- traits  # Map trait codes to labels
+    trait_names <- as.character(traits)  # Use the values as trait names
+    cat("Using custom trait labels from named vector\n")
+  }
+  
   # Validate traits exist in data
-  available_traits <- intersect(traits, names(data))
-  missing_traits <- setdiff(traits, names(data))
+  available_traits <- intersect(trait_names, names(data))
+  missing_traits <- setdiff(trait_names, names(data))
   
   if (length(missing_traits) > 0) {
     cat("Warning: These traits not found in data:", paste(missing_traits, collapse = ", "), "\n")
@@ -108,21 +119,14 @@ show_spatial_distribution <- function(data, traits, force_all = FALSE, max_trait
   
   cat("Creating spatial plots for", length(available_traits), "traits\n")
   
-  # Define trait labels for plotting
-  trait_labels <- list(
-    DTA = "Days to Anthesis", DTS = "Days to Silking", LAE = "Leaves Above Ear",
-    PH = "Plant Height", EN = "Ear Number", SL = "Sheath Length", 
-    BL = "Blade Length", BW = "Blade Width", EBA = "Estimated Blade Area",
-    DTA_GDD = "Anthesis GDD", DTS_GDD = "Silking GDD"
-  )
-  
   # Create all spatial plots
   spatial_plots <- list()
   for (trait in available_traits) {
-    plot_title <- if (trait %in% names(trait_labels)) {
-      trait_labels[[trait]]
+    # Use custom labels if provided, otherwise use trait name
+    plot_title <- if (!is.null(custom_labels) && trait %in% names(custom_labels)) {
+      custom_labels[[trait]]
     } else {
-      trait  # Use trait name if no pretty label available
+      trait  # Use trait name if no custom label available
     }
     
     tryCatch({

@@ -221,7 +221,23 @@ if (length(variogram_results) > 0) {
 ```{r spatial-plots, fig.cap="Spatial distribution of phenotypes across the experimental field"}
 # Create spatial plots for all traits using the enhanced package function
 # This function handles trait validation, plotting, and grouping automatically
-show_spatial_distribution(field_data, phenotypes)
+
+# Define trait labels for better plot titles
+trait_labels <- c(
+  "Days to Anthesis" = "DTA",
+  "Days to Silking" = "DTS", 
+  "Leaves Above Ear" = "LAE",
+  "Plant Height" = "PH",
+  "Ear Number" = "EN",
+  "Sheath Length" = "SL",
+  "Blade Length" = "BL", 
+  "Blade Width" = "BW",
+  "Estimated Blade Area" = "EBA"
+)
+
+# Filter to available phenotypes and create spatial plots
+available_trait_labels <- trait_labels[trait_labels %in% phenotypes]
+show_spatial_distribution(field_data, available_trait_labels)
 ```
 
 ## 6. Comprehensive Model Comparison
