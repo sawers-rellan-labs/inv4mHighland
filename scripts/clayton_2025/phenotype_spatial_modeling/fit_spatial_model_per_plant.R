@@ -22,7 +22,7 @@ load_clayton_data <- function(data_file) {
   
   # Clean and prepare data following Clayton 2025 approach
   field_data <- field_data_raw %>%
-    # Calculate Estimated Blade Area (EBA) = 0.75 * BL * BW FIRST
+    # Calculate Estimated Blade Area 
     mutate(EBA = 0.75 * BL * BW) %>%
     rename(
       plant_id = plant,
@@ -305,8 +305,9 @@ if (nrow(best_models) > 0) {
 
 # Add treatment effects summary
 if (nrow(significant_effects) > 0) {
-  summary_text <- paste0(summary_text, "\nSIGNIFICANT TREATMENT EFFECTS (p < 0.05)\n", 
-                        "---------------------------------------\n")
+  summary_text <- paste0( summary_text,
+                 "\nSIGNIFICANT TREATMENT EFFECTS (p < 0.05)\n", 
+                "---------------------------------------\n")
   for (i in 1:nrow(significant_effects)) {
     row <- significant_effects[i, ]
     summary_text <- paste0(summary_text,
@@ -315,7 +316,9 @@ if (nrow(significant_effects) > 0) {
     )
   }
 } else {
-  summary_text <- paste0(summary_text, "\nTREATMENT EFFECTS\n", "-----------------\n",
+  summary_text <- paste0(summary_text,
+                         "\nTREATMENT EFFECTS\n",
+                         "-----------------\n",
                         "No significant inv4m effects detected at p < 0.05\n")
 }
 
@@ -333,3 +336,4 @@ cat("- variogram_summary.csv: Spatial autocorrelation summary\n")
 cat("- clayton_2025_analysis_summary.txt: Human-readable report\n")
 cat("- scaled_variograms_all_traits.png: Variogram visualization\n")
 cat("- Multiple spatial distribution and diagnostic plots\n\n")
+c
